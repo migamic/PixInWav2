@@ -11,6 +11,7 @@ trainer_rgb.py
 
 import argparse
 
+from loader import loader
 
 ### PARSING ###
 
@@ -96,21 +97,23 @@ parser.add_argument('--mp_join',
 
 if __name__ == '__main__':
 
+    print('starting')
     args = parser.parse_args()
+    print('parsed')
     print(args)
 
-'''
     train_loader = loader(
         set='train',
-        rgb=args.rgb,
         transform=args.transform,
     )
+    print('trainload')
     test_loader = loader(
         set='test',
-        rgb=args.rgb,
         transform=args.transform,
     )
+    print('testload')
 
+'''
     model = StegoUNet(
         # architecture=args.architecture,
         transform=args.transform,
