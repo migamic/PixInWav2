@@ -1,0 +1,290 @@
+'''
+umodel.py
+
+* Auxiliary functions:
+	- Pixel unshuffle
+	- Convolution layers
+* Subnets:
+	- PrepHidingNet
+	- RevealNet
+* Main net: StegoUNet
+'''
+
+
+import torch
+import numpy as np
+import torch.nn as nn
+from torch import utils
+import torch.nn.functional as F
+from pystct import sdct_torch, isdct_torch
+
+
+def pixel_unshuffle(input, downscale_factor):
+    '''
+    input: batchSize * c * k*w * k*h
+    kdownscale_factor: k
+    batchSize * c * k*w * k*h -> batchSize * k*k*c * w * h
+    '''
+    c = input.shape[1]
+
+    kernel = torch.zeros(size=[downscale_factor * downscale_factor * c,
+                               1, downscale_factor, downscale_factor],
+                         device=input.device)
+    for y in range(downscale_factor):
+        for x in range(downscale_factor):
+            kernel[x + y * downscale_factor::downscale_factor*downscale_factor, 0, y, x] = 1
+    return F.conv2d(input, kernel, stride=downscale_factor, groups=c)
+
+
+class PixelUnshuffle(nn.Module):
+    def __init__(self, downscale_factor):
+        super(PixelUnshuffle, self).__init__()
+        self.downscale_factor = downscale_factor
+
+    def forward(self, input):
+        return pixel_unshuffle(input, self.downscale_factor)
+
+
+class DoubleConv(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(0.8, inplace=True),
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(0.8, inplace=True),
+        )
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+
+
+
+class Down(nn.Module):
+
+    def __init__(self, in_channels, out_channels, downsample_factor=8):
+        super().__init__()
+
+        self.conv = DoubleConv(in_channels, out_channels)
+        self.down = nn.MaxPool2d(downsample_factor)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.down(x)
+        return x
+
+class Up(nn.Module):
+
+    def __init__(self, in_channels, out_channels, magphase=False):
+        super().__init__()
+        self.up = nn.Sequential(
+            nn.ConvTranspose2d(in_channels , out_channels, kernel_size=3, stride=4, output_padding=0),
+            nn.LeakyReLU(0.8, inplace=True),
+            nn.ConvTranspose2d(out_channels , out_channels, kernel_size=3, stride=2, output_padding=1),
+            nn.LeakyReLU(0.8, inplace=True),
+        )
+        
+        convinput = 3 if magphase else out_channels * 2
+
+        self.conv = DoubleConv(convinput, out_channels)
+
+    def forward(self, mix, im_opposite, au_opposite = None):
+        mix = self.up(mix)
+        x = torch.cat((mix, im_opposite), dim=1)
+        return self.conv(x)
+
+
+
+
+
+class PrepHidingNet(nn.Module):
+    def __init__(self, transform='cosine'):
+        super(PrepHidingNet, self).__init__()
+        self._transform = transform
+    
+        self.pixel_shuffle = nn.PixelShuffle(2)
+
+        self.im_encoder_layers = nn.ModuleList([
+            Down(1, 64),
+            Down(64, 64 * 2)
+        ])
+        self.im_decoder_layers = nn.ModuleList([
+            Up(64 * 2, 64),
+            Up(64, 1)
+        ])
+    
+    def forward(self, im):
+
+        im = self.pixel_shuffle(im)
+
+        # Upsample the image to make it the same shape as the container (different for STDCT and STFT)
+        if self._transform == 'cosine':
+            im_enc = [nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)]
+        elif self._transform == 'fourier':
+            im_enc = [nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)]
+        else: raise Exception(f'Transform not implemented')
+        
+        # Encoder part of the UNet
+        for enc_layer_idx, enc_layer in enumerate(self.im_encoder_layers):
+            im_enc.append(enc_layer(im_enc[-1]))
+
+        mix_dec = [im_enc.pop(-1)]
+
+        # Decoder part of the UNet
+        for dec_layer_idx, dec_layer in enumerate(self.im_decoder_layers):
+            mix_dec.append(dec_layer(mix_dec[-1], im_enc[-1 - dec_layer_idx], None))
+
+        return mix_dec[-1]
+
+
+
+
+
+class RevealNet(nn.Module):
+    def __init__(self, mp_decoder=None):
+        super(RevealNet, self).__init__()
+
+        self.mp_decoder = mp_decoder
+        self.pixel_unshuffle = PixelUnshuffle(2)
+
+        # If mp_decoder == unet, have RevealNet accept 2 channels as input instead of 1
+        if self.mp_decoder != 'unet':
+            self.im_encoder_layers = nn.ModuleList([
+                Down(1, 64),
+                Down(64, 64 * 2)
+            ])
+        else:
+            self.im_encoder_layers = nn.ModuleList([
+                Down(2, 64),
+                Down(64, 64 * 2)
+            ])
+
+        if self.mp_decoder != 'unet':
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 1)
+            ])
+        else:    
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 1, magphase=True)
+            ])
+
+    def forward(self, ct, ct_phase=None):
+
+        # ct_phase is not None if and only if mp_decoder == unet
+        # For other decoder types, ct is the only container
+        assert not (self.mp_decoder == 'unet'  and ct_phase is None)
+        assert not (self.mp_decoder != 'unet'  and ct_phase is not None)
+
+        # Make the container the right size before feeding into the conv layers
+        im_enc = [F.interpolate(ct, size=(256 * 2, 256 * 2))]
+        if self.mp_decoder == 'unet':
+            im_enc_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
+
+        if self.mp_decoder == 'unet':
+            # Concatenate mag and phase containers to input to RevealNet
+            im_enc = [torch.cat((im_enc[0], im_enc_phase[0]), 1)]
+
+        # Encoder part of the UNet
+        for enc_layer_idx, enc_layer in enumerate(self.im_encoder_layers):
+            im_enc.append(enc_layer(im_enc[-1]))
+
+        im_dec = [im_enc.pop(-1)]
+
+        # Decoder part of the UNet
+        for dec_layer_idx, dec_layer in enumerate(self.im_decoder_layers):
+            im_dec.append(
+                dec_layer(im_dec[-1],
+                im_enc[-1 - dec_layer_idx])
+            )
+
+        # Pixel Unshuffle and delete 4th component
+        revealed = torch.narrow(self.pixel_unshuffle(im_dec[-1]), 1, 0, 3)
+
+        return revealed
+
+
+
+
+class StegoUNet(nn.Module):
+    def __init__(self, transform='cosine', ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean'):
+
+        super().__init__()
+
+        self.transform = transform
+        self.ft_container = ft_container
+        self.mp_encoder = mp_encoder
+        self.mp_decoder = mp_decoder
+        self.mp_join = mp_join
+        
+        if transform != 'fourier' or ft_container != 'magphase':
+            self.mp_decoder = None # For compatiblity with RevealNet
+
+        # Sub-networks
+        self.PHN = PrepHidingNet(self.transform)
+        self.RN = RevealNet(self.mp_decoder)
+        if transform == 'fourier' and ft_container == 'magphase':
+            # The previous one is for the magnitude. Create a second one for the phase
+            if mp_encoder == 'double':
+                self.RN_phase = RevealNet(self.mp_decoder)
+            if mp_decoder == 'double':
+                self.PHN_phase = PrepHidingNet(self.transform)
+                if mp_join == '2D':
+                    self.mag_phase_join = nn.Conv2d(6,3,1)
+                elif mp_join == '3D':
+                    self.mag_phase_join = nn.Conv3d(2,1,1)
+
+    def forward(self, secret, cover, cover_phase=None):
+
+        # cover_phase is not None if and only if using mag+phase
+        # If using the phase only, 'cover' is actually the phase!
+        assert not (self.ft_container is not 'magphase' and cover_phase is not None)
+        assert not (self.ft_container is 'magphase' and cover_phase is None)
+
+        # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
+        zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()
+        secret = torch.cat((secret,zero),1)
+        
+        # Encode the image using PHN
+        hidden_signal = self.PHN(secret)
+        if self.transform == 'fourier' and self.ft_container == 'magphase' and self.mp_encoder == 'double':
+            hidden_signal_phase = self.PHN_phase(secret)
+
+        # Residual connection
+        container = cover + hidden_signal
+        if self.transform == 'fourier' and self.ft_container == 'magphase':
+            if self.mp_encoder == 'double':
+                container_phase = cover_phase + hidden_signal_phase
+            elif self.mp_encoder == 'single':
+                container_phase = cover_phase + hidden_signal
+
+        # Reveal image
+        if self.transform == 'fourier' and self.ft_container == 'magphase':
+            if self.mp_decoder == 'unet':
+                revealed = self.RN(container, container_phase)
+            else:
+                revealed = self.RN(container)
+                revealed_phase = self.RN_phase(container_phase)
+                if self.mp_join == 'mean':
+                    revealed = revealed.add(revealed_phase)*0.5
+                elif self.mp_join == '2D':
+                    join = torch.cat((revealed,revealed_phase),1)
+                    revealed = self.mag_phase_join(join)
+                elif self.mp_join == '3D':
+                    revealed = revealed.unsqueeze(0)
+                    revealed_phase = revealed_phase.unsqueeze(0)
+                    join = torch.cat((revealed,revealed_phase),1)
+                    revealed = self.mag_phase_join(join).squeeze(1)
+            return (container, container_phase), revealed
+        else:
+            # If only using one container, reveal and return
+            revealed = self.RN(container)
+            return container, revealed
