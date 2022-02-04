@@ -1,10 +1,9 @@
 '''
-trainer_rgb.py
+main.py
 
 * Parsing arguments
 * Loading/saving checkpoints
 * Visualization functions
-* Model training & validation
 * main function
 '''
 
@@ -12,6 +11,8 @@ trainer_rgb.py
 import argparse
 
 from loader import loader
+from umodel import StegoUNet
+from train import train, validate
 
 ### PARSING ###
 
@@ -33,6 +34,12 @@ parser.add_argument('--beta',
                         metavar='DOUBLE',
                         help='Beta hyperparameter'
                     )
+parser.add_argument('--lam',
+                        type=float,
+                        default=0,
+                        metavar='DOUBLE',
+                        help='Lambda hyperparameter'
+                    )
 parser.add_argument('--lr',
                         type=float,
                         default=0.001,
@@ -50,12 +57,6 @@ parser.add_argument('--summary',
                         default=None,
                         metavar='STRING',
                         help='Summary to be shown in wandb'
-                    )
-parser.add_argument('--add_l1_term',
-                        type=parse_keyword,
-                        default=False,
-                        metavar='BOOL',
-                        help='Add L1 term in the loss function'
                     )
 parser.add_argument('--from_checkpoint',
                         type=parse_keyword,
@@ -95,6 +96,7 @@ parser.add_argument('--mp_join',
                     )
 
 
+
 if __name__ == '__main__':
 
     args = parser.parse_args()
@@ -109,27 +111,29 @@ if __name__ == '__main__':
         transform=args.transform,
     )
 
-'''
     model = StegoUNet(
-        # architecture=args.architecture,
         transform=args.transform,
-        add_noise=args.add_noise,
-        noise_kind=args.noise_kind,
-        noise_amplitude=args.noise_amplitude,
-        phase_type=args.phase_type
+        ft_container=args.ft_container,
+        mp_encoder=args.mp_encoder,
+        mp_decoder=args.mp_decoder,
+        mp_join=args.mp_join
     )
 
     if args.from_checkpoint:
         # Load checkpoint
-        checkpoint = torch.load(os.path.join(os.environ.get('OUT_PATH'),f'models/             checkpoint_run_{args.experiment}.pt'), map_location='cpu')
+        checkpoint = torch.load(os.path.join(os.environ.get('OUT_PATH'),f'models/checkpoint_run_{args.experiment}.pt'), map_location='cpu')
         model = nn.DataParallel(model)
         model.load_state_dict(checkpoint['state_dict'])
-        print('Checkpoint loaded ++')
+        print('Checkpoint loaded')
+
+    print('Ready to train!')
+
     train(
         model=model,
         tr_loader=train_loader,
         vd_loader=test_loader,
         beta=args.beta,
+        lam=args.lam,
         lr=args.lr,
         epochs=2,
         slide=15,
@@ -137,9 +141,6 @@ if __name__ == '__main__':
         prev_i=checkpoint['i'] if args.from_checkpoint else None,
         summary=args.summary,
         experiment=args.experiment,
-        add_l1_term=args.add_l1_term,
         transform=args.transform,
-        on_phase=args.on_phase,
-        phase_type=args.phase_type
+        ft_container=args.ft_container
     )
-'''
