@@ -159,9 +159,10 @@ def StegoLoss(secret, cover, container, container_2x, revealed, beta, cover2=Non
     loss_cover = F.mse_loss(cover, container)
     if cover2 is not None:
         # Loss cover is adding MSEs for the magnitude and phase
-        # loss_cover += F.mse_loss(cover2, container2)
+        loss_cover += F.mse_loss(cover2, container2)
+
         # Try ignoring phase MSE, only use magnitude
-        loss_cover = F.mse_loss(cover2, container2)
+        # loss_cover = F.mse_loss(cover2, container2)
     loss_secret = nn.L1Loss()
     loss_spectrum = F.mse_loss(container, container_2x)
     if container_2x2 is not None:

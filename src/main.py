@@ -3,7 +3,6 @@ main.py
 
 * Parsing arguments
 * Loading/saving checkpoints
-* Visualization functions
 * main function
 '''
 

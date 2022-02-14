@@ -2,11 +2,11 @@
 umodel.py
 
 * Auxiliary functions:
-	- Pixel unshuffle
-	- Convolution layers
+    - Pixel unshuffle
+    - Convolution layers
 * Subnets:
-	- PrepHidingNet
-	- RevealNet
+    - PrepHidingNet
+    - RevealNet
 * Main net: StegoUNet
 '''
 
@@ -19,21 +19,21 @@ import torch.nn.functional as F
 from pystct import sdct_torch, isdct_torch
 
 
-def pixel_unshuffle(input, downscale_factor):
+def pixel_unshuffle(img, downscale_factor):
     '''
     input: batchSize * c * k*w * k*h
     kdownscale_factor: k
     batchSize * c * k*w * k*h -> batchSize * k*k*c * w * h
     '''
-    c = input.shape[1]
+    c = img.shape[1]
 
     kernel = torch.zeros(size=[downscale_factor * downscale_factor * c,
-                               1, downscale_factor, downscale_factor],
-                         device=input.device)
+                         1, downscale_factor, downscale_factor],
+                         device=img.device, dtype=img.dtype)
     for y in range(downscale_factor):
         for x in range(downscale_factor):
             kernel[x + y * downscale_factor::downscale_factor*downscale_factor, 0, y, x] = 1
-    return F.conv2d(input, kernel, stride=downscale_factor, groups=c)
+    return F.conv2d(img, kernel, stride=downscale_factor, groups=c)
 
 
 class PixelUnshuffle(nn.Module):
@@ -41,8 +41,8 @@ class PixelUnshuffle(nn.Module):
         super(PixelUnshuffle, self).__init__()
         self.downscale_factor = downscale_factor
 
-    def forward(self, input):
-        return pixel_unshuffle(input, self.downscale_factor)
+    def forward(self, img):
+        return pixel_unshuffle(img, self.downscale_factor)
 
 
 class DoubleConv(nn.Module):
@@ -126,7 +126,7 @@ class PrepHidingNet(nn.Module):
 
         # Upsample the image to make it the same shape as the container (different for STDCT and STFT)
         if self._transform == 'cosine':
-            im_enc = [nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)]
+            im_enc = [nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)]
         elif self._transform == 'fourier':
             im_enc = [nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)]
         else: raise Exception(f'Transform not implemented')
@@ -234,9 +234,9 @@ class StegoUNet(nn.Module):
         if transform == 'fourier' and ft_container == 'magphase':
             # The previous one is for the magnitude. Create a second one for the phase
             if mp_encoder == 'double':
-                self.RN_phase = RevealNet(self.mp_decoder)
-            if mp_decoder == 'double':
                 self.PHN_phase = PrepHidingNet(self.transform)
+            if mp_decoder == 'double':
+                self.RN_phase = RevealNet(self.mp_decoder)
                 if mp_join == '2D':
                     self.mag_phase_join = nn.Conv2d(6,3,1)
                 elif mp_join == '3D':
@@ -246,8 +246,8 @@ class StegoUNet(nn.Module):
 
         # cover_phase is not None if and only if using mag+phase
         # If using the phase only, 'cover' is actually the phase!
-        assert not (self.ft_container is not 'magphase' and cover_phase is not None)
-        assert not (self.ft_container is 'magphase' and cover_phase is None)
+        assert not ((self.transform == 'fourier' and self.ft_container == 'magphase') and cover_phase is None)
+        assert not ((self.transform == 'fourier' and self.ft_container != 'magphase') and cover_phase is not None)
 
         # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
         zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()

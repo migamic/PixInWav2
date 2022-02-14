@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch_stft import STFT
+from pystct import sdct_torch, isdct_torch
 from losses import ssim, SNR, PSNR, StegoLoss
 from visualization import viz2paper
 
@@ -104,12 +105,16 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
                 elif ft_container == 'magphase':
                     # If using mag+phase, get both mag and phase containers
                     (containers, containers_phase), revealed = model(secrets, covers, phase)
+            else:
+                # STDCT transform
+                containers, revealed = model(secrets, covers)
+
 
             # Compute the loss
             if transform == 'cosine':
-                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
-                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
-                container_2x = sdct_torch(container_wav, frame_length=1024, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
+                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
+                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
+                container_2x = sdct_torch(container_wav, frame_length=4096, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
                 loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, covers, containers, container_2x, revealed, beta)
             elif transform == 'fourier': 
                 if ft_container == 'mag':
@@ -176,14 +181,14 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
 
             print(
                 f'(#{i})[{np.round(time.time()-ini,2)}s]\
-                Train Loss {loss.detach().item()},\
-                MSE audio {loss_cover.detach().item()},\
-                MSE image {loss_secret.detach().item()},\
-                MSE spectrum {loss_spectrum.detach().item()},\
-                SNR {snr_audio},\
-                PSNR {psnr_image.detach().item()},\
-                SSIM {ssim_image.detach().item()},\
-                L1 {l1_loss.detach().item()}' 
+                Train Loss {round(loss.detach().item(),4)},\
+                MSE audio {round(loss_cover.detach().item(),4)},\
+                MSE image {round(loss_secret.detach().item(),4)},\
+                MSE spectrum {round(loss_spectrum.detach().item(),4)},\
+                SNR {round(snr_audio,4)},\
+                PSNR {round(psnr_image.detach().item(),4)},\
+                SSIM {round(ssim_image.detach().item(),4)},\
+                L1 {round(l1_loss.detach().item(),4)}' 
                 )
 
             # Log train average loss to wandb
@@ -237,14 +242,14 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
         
         print(
             f'Epoch [{epoch + 1}/{epochs}], \
-            Average_loss: {avg_train_loss}, \
-            Average_loss_cover: {avg_train_loss_cover}, \
-            Average_loss_secret: {avg_train_loss_secret}, \
-            Average_loss_spectrum: {avg_train_loss_spectrum}, \
-            Average SNR: {avg_snr}, \
-            Average PSNR: {avg_psnr},\
-            Average SSIM: {avg_ssim}, \
-            Average L1: {avg_l1_loss}'
+            Average_loss: {round(avg_train_loss,4)}, \
+            Average_loss_cover: {round(avg_train_loss_cover,4)}, \
+            Average_loss_secret: {round(avg_train_loss_secret,4)}, \
+            Average_loss_spectrum: {round(avg_train_loss_spectrum,4)}, \
+            Average SNR: {round(avg_snr,4)}, \
+            Average PSNR: {round(avg_psnr,4)},\
+            Average SSIM: {round(avg_ssim,4)}, \
+            Average L1: {round(avg_l1_loss,4)}'
         )
 
         # Log train average loss to wandb
@@ -322,19 +327,32 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
                 elif ft_container == 'magphase':
                     # If using mag+phase, get both mag and phase containers
                     (containers, containers_phase), revealed = model(secrets, covers, phase)
+            else:
+                # STDCT transform
+                containers, revealed = model(secrets, covers)
 
             # Visualize results
             if i == 0:
-                if (transform != 'fourier') or (ft_container != 'magphase'):
-                    containers_phase = None # Otherwise it's the phase container
-                fig = viz2paper(secrets.cpu(), revealed.cpu(), covers.cpu(), containers.cpu(), containers_phase.cpu() if containers_phase is not None else None, transform, ft_container)
+                if transform == 'cosine':
+                    fig = viz2paper(secrets.cpu(), revealed.cpu(), covers.cpu(), containers.cpu(), None, None, transform, ft_container)
+                elif transform == 'fourier':
+                    if ft_container == 'mag':
+                        fig = viz2paper(secrets.cpu(), revealed.cpu(), covers.cpu(), containers.cpu(), None, None, transform, ft_container)
+                    elif ft_container == 'phase':
+                        fig = viz2paper(secrets.cpu(), revealed.cpu(), phase.cpu(), containers.cpu(), None, None, transform, ft_container)
+                    elif ft_container == 'magphase':
+                        fig = viz2paper(secrets.cpu(), revealed.cpu(), covers.cpu(), containers.cpu(), phase.cpu(), containers_phase.cpu(), transform, ft_container)
+                else:
+                    raise Exception('Transform not implemented')
+
+
                 wandb.log({f"Revelation at epoch {epoch}, vd iteration {tr_i}": fig})
 
             # Compute the loss
             if transform == 'cosine':
-                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
-                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
-                container_2x = sdct_torch(container_wav, frame_length=1024, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
+                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
+                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
+                container_2x = sdct_torch(container_wav, frame_length=4096, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
                 loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, covers, containers, container_2x, revealed, beta)
             elif transform == 'fourier': 
                 if ft_container == 'mag':
@@ -374,7 +392,7 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
 
             if l1_criterion is not None:
                 if transform == 'cosine':
-                    original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
+                    original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
                 elif transform == 'fourier':
                     original_wav = transform_constructor.inverse(covers.squeeze(1), phase.squeeze(1))
                 l1_loss = l1_criterion(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
