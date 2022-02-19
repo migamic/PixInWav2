@@ -21,7 +21,6 @@ def SNR(cover, container, phase, container_phase, transform, transform_construct
 
     # 'container_phase' is the STFT phase when using mag+phase
     # Otherwhise 'container' is the only container
-    print('info', transform, ft_container, container_phase is None)
     assert not ((transform == 'fourier' and ft_container == 'magphase') and container_phase is None)
     assert not ((transform == 'fourier' and ft_container != 'magphase') and container_phase is not None)
 

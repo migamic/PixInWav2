@@ -84,6 +84,9 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
         train_loss, train_loss_cover, train_loss_secret, train_loss_spectrum, snr, psnr, ssim_secret, train_l1_loss = [], [], [], [], [], [], [], []
         vd_loss, vd_loss_cover, vd_loss_secret, vd_snr, vd_psnr, vd_ssim, vd_l1 = [], [], [], [], [], [], []
         
+        # Print headers for the losses
+        print()
+        print(' Iter.     Time  Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
         for i, data in enumerate(tr_loader):
 
             if prev_i != None and i < prev_i - 1: continue # Checkpoint pass
@@ -179,17 +182,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
             avg_l1_loss = np.mean(train_l1_loss[-slide:])
             avg_l1_loss = np.mean(train_l1_loss[-slide:])
 
-            print(
-                f'(#{i})[{np.round(time.time()-ini,2)}s]\
-                Train Loss {round(loss.detach().item(),4)},\
-                MSE audio {round(loss_cover.detach().item(),4)},\
-                MSE image {round(loss_secret.detach().item(),4)},\
-                MSE spectrum {round(loss_spectrum.detach().item(),4)},\
-                SNR {round(snr_audio,4)},\
-                PSNR {round(psnr_image.detach().item(),4)},\
-                SSIM {round(ssim_image.detach().item(),4)},\
-                L1 {round(l1_loss.detach().item(),4)}' 
-                )
+            print('(#%4d)[%5d s] %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (i, np.round(time.time()-ini), loss.detach().item(), loss_cover.detach().item(), loss_secret.detach().item(), loss_spectrum.detach().item(), snr_audio, psnr_image.detach().item(), ssim_image.detach().item(), l1_loss.detach().item()))
 
             # Log train average loss to wandb
             wandb.log({
@@ -239,19 +232,16 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
                     'vd_ssim': vd_ssim,
                     'vd_l1': vd_l1,
                 }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'), f'models/checkpoint_run_{experiment}.pt'))
+    
+                # Print headers again to resume training
+                print(' Iter.     Time  Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
         
-        print(
-            f'Epoch [{epoch + 1}/{epochs}], \
-            Average_loss: {round(avg_train_loss,4)}, \
-            Average_loss_cover: {round(avg_train_loss_cover,4)}, \
-            Average_loss_secret: {round(avg_train_loss_secret,4)}, \
-            Average_loss_spectrum: {round(avg_train_loss_spectrum,4)}, \
-            Average SNR: {round(avg_snr,4)}, \
-            Average PSNR: {round(avg_psnr,4)},\
-            Average SSIM: {round(avg_ssim,4)}, \
-            Average L1: {round(avg_l1_loss,4)}'
-        )
-
+        # Print average validation results after every epoch
+        print()
+        print('Epoch average:      Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
+        print('Epoch %1d/%1d:          %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (epoch+1, epochs, avg_train_loss, avg_train_loss_cover, avg_train_loss_secret, avg_train_loss_spectrum, avg_snr, avg_psnr, avg_ssim, avg_l1_loss))
+        print()
+        
         # Log train average loss to wandb
         wandb.log({
             'tr_loss': avg_train_loss,
@@ -406,17 +396,17 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
             valid_ssim.append(ssim_image.detach().item())
             valid_l1.append(l1_loss.detach().item())
 
-            print(
-                f'(#{i})[{np.round(time.time()-iniv,2)}s]\
-                Valid Loss {loss.detach().item()},\
-                cover_error {loss_cover.detach().item()},\
-                secret_error {loss_secret.detach().item()},\
-                spectrum_error {loss_spectrum.detach().item()},\
-                SNR {vd_snr_audio},\
-                PSNR {vd_psnr_image.detach().item()},\
-                SSIM {ssim_image.detach().item()},\
-                L1 {l1_loss.detach().item()}'
-            )
+            # print(
+            #     f'(#{i})[{np.round(time.time()-iniv,2)}s]\
+            #     Valid Loss {loss.detach().item()},\
+            #     cover_error {loss_cover.detach().item()},\
+            #     secret_error {loss_secret.detach().item()},\
+            #     spectrum_error {loss_spectrum.detach().item()},\
+            #     SNR {vd_snr_audio},\
+            #     PSNR {vd_psnr_image.detach().item()},\
+            #     SSIM {ssim_image.detach().item()},\
+            #     L1 {l1_loss.detach().item()}'
+            # )
 
             if i >= 500: break
             # if i >= vd_datalen: break
@@ -451,5 +441,11 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
     del valid_ssim
     del valid_l1
     gc.collect()
+
+    # Print average validation results
+    print()
+    print('Validation avg:    Val. Loss    Cover   Secret  Au. SNR Im. PSNR Im. SSIM   Au. L1')
+    print('                    %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1))
+    print()
 
     return avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1
