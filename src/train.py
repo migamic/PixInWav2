@@ -133,10 +133,9 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
                 elif ft_container == 'magphase':
                     # Using magnitude+phase. Compute both MSEs
                     original_wav = stft.inverse(covers.squeeze(1), phase.squeeze(1))
-                    container_wav = stft.inverse(covers.squeeze(1), containers.squeeze(1))
-                    container_phase_wav = stft.inverse(covers.squeeze(1), containers_phase.squeeze(1))
-                    container_2x_phase = stft.transform(container_phase_wav)[1].unsqueeze(0)
+                    container_wav = stft.inverse(containers.squeeze(1), containers_phase.squeeze(1)) # Single waveform with mag and phase modified
                     container_2x_mag = stft.transform(container_wav)[0].unsqueeze(0)
+                    container_2x_phase = stft.transform(container_wav)[1].unsqueeze(0)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag)
 
             # Compute L1 waveform loss. Add it only if specified
