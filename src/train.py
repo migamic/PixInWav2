@@ -357,10 +357,9 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
                 elif ft_container == 'magphase':
                     # Using magnitude+phase. Compute both MSEs
                     original_wav = transform_constructor.inverse(covers.squeeze(1), phase.squeeze(1))
-                    container_wav = transform_constructor.inverse(covers.squeeze(1), containers.squeeze(1))
-                    container_phase_wav = transform_constructor.inverse(covers.squeeze(1), containers_phase.squeeze(1))
-                    container_2x_phase = transform_constructor.transform(container_phase_wav)[1].unsqueeze(0)
+                    container_wav = transform_constructor.inverse(containers.squeeze(1), containers_phase.squeeze(1)) # Single waveform with mag and phase modified
                     container_2x_mag = transform_constructor.transform(container_wav)[0].unsqueeze(0)
+                    container_2x_phase = transform_constructor.transform(container_wav)[1].unsqueeze(0)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag)
 
 
