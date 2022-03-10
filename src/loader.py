@@ -145,6 +145,7 @@ class StegoDataset(torch.utils.data.Dataset):
         self._image_data_path = pathlib.Path(image_root) / 'train'
         self._audio_data_path = pathlib.Path(f'{audio_root}{folder}')
         self._MAX_LIMIT = 10000 if folder == 'train' else 900
+        self._TOTAL = 10000
         self._MAX_AUDIO_LIMIT = 17584 if folder == 'train' else 946
         self._colorspace = 'RGB' if rgb else 'L'
         self._transform = transform
@@ -158,24 +159,43 @@ class StegoDataset(torch.utils.data.Dataset):
         self._indices = []
         self._audios = []
 
-        test_i = 0
-        for key in mappings.keys():
-            for img in glob.glob(f'{self._image_data_path}/{key}/*.{self.image_extension}'):
-                test_i += 1
-                if folder == 'train' or (folder == 'test' and test_i > self._MAX_LIMIT):
+        #IMAGE PATH RETRIEVING
+        test_i = 0 
+        #keys are n90923u23
+        if (folder == 'train'):
+            for key in mappings.keys():
+                for img in glob.glob(f'{self._image_data_path}/{key}/*.{self.image_extension}'):
+    
                     self._indices.append((key, re.search(r'(?<=_)\d+', img).group()))
                     self._index += 1
-                if self._index == self._MAX_LIMIT:
-                    break
-            if self._index == self._MAX_LIMIT:
-                break
 
-        _aux_index = 0
+                    if self._index == self._MAX_LIMIT: break
+                if self._index == self._MAX_LIMIT: break
+
+        elif (folder == "test"):
+            for key in mappings.keys():
+                for img in glob.glob(f'{self._image_data_path}/{key}/*.{self.image_extension}'):
+    
+                    if test_i > self._TOTAL:
+                        self._indices.append((key, re.search(r'(?<=_)\d+', img).group()))
+                        self._index += 1
+    
+                    test_i += 1
+
+                    if self._index == self._MAX_LIMIT: break
+                if self._index == self._MAX_LIMIT: break
+
+
+        #AUDIO PATH RETRIEVING (here the paths for test and train are different)
+        self._index_aud = 0
+
         for audio_path in glob.glob(f'{self._audio_data_path}/*.{self.audio_extension}'):
+
             self._audios.append(audio_path)
-            _aux_index += 1
-            if _aux_index == self._MAX_AUDIO_LIMIT: break
-        random.shuffle(self._audios)
+            self._index_aud += 1
+
+            if (self._index_aud == self._MAX_AUDIO_LIMIT): break
+
 
         self._AUDIO_PROCESSOR = AudioProcessor(transform=self._transform)
 
