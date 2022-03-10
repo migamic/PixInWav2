@@ -189,7 +189,6 @@ class RevealNet(nn.Module):
         if self.mp_decoder == 'unet':
             im_enc_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
 
-        if self.mp_decoder == 'unet':
             # Concatenate mag and phase containers to input to RevealNet
             im_enc = [torch.cat((im_enc[0], im_enc_phase[0]), 1)]
 
