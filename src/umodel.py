@@ -214,7 +214,7 @@ class RevealNet(nn.Module):
 
 
 class StegoUNet(nn.Module):
-    def __init__(self, transform='cosine', ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean'):
+    def __init__(self, transform='cosine', ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False):
 
         super().__init__()
 
@@ -223,6 +223,7 @@ class StegoUNet(nn.Module):
         self.mp_encoder = mp_encoder
         self.mp_decoder = mp_decoder
         self.mp_join = mp_join
+        self.permutation = permutation
         
         if transform != 'fourier' or ft_container != 'magphase':
             self.mp_decoder = None # For compatiblity with RevealNet
@@ -257,13 +258,37 @@ class StegoUNet(nn.Module):
         if self.transform == 'fourier' and self.ft_container == 'magphase' and self.mp_encoder == 'double':
             hidden_signal_phase = self.PHN_phase(secret)
 
+        # Permute the encoded image if required
+        if self.permutation:
+            # Generate permutation index, which will be reused for the inverse
+            perm_idx = torch.randperm(hidden_signal.nelement())
+            # Permute the hidden signal
+            hidden_signal = hidden_signal.view(-1)[perm_idx].view(hidden_signal.size())
+            # Also permute the phase if necessary
+            if self.transform == 'fourier' and self.ft_container == 'magphase' and self.mp_encoder == 'double':
+                hidden_signal_phase = hidden_signal_phase.view(-1)[perm_idx].view(hidden_signal_phase.size())
+
         # Residual connection
+        # Also keep a copy of the unpermuted containers to compute the loss
         container = cover + hidden_signal
+        orig_container = container
         if self.transform == 'fourier' and self.ft_container == 'magphase':
             if self.mp_encoder == 'double':
                 container_phase = cover_phase + hidden_signal_phase
             elif self.mp_encoder == 'single':
                 container_phase = cover_phase + hidden_signal
+            orig_container_phase = container_phase
+
+
+        # Unpermute the encoded image if it was permuted
+        if self.permutation:
+            # Compute the inverse permutation
+            inv_perm_idx = torch.argsort(perm_idx)
+            # Permute the hidden signal with the inverse
+            container = container.view(-1)[inv_perm_idx].view(container.size())
+            # Also permute the phase if necessary
+            if self.transform == 'fourier' and self.ft_container == 'magphase' and self.mp_encoder == 'double':
+                container_phase = container_phase.view(-1)[inv_perm_idx].view(container_phase.size())
 
         # Reveal image
         if self.transform == 'fourier' and self.ft_container == 'magphase':
@@ -282,8 +307,8 @@ class StegoUNet(nn.Module):
                     revealed_phase = revealed_phase.unsqueeze(0)
                     join = torch.cat((revealed,revealed_phase),1)
                     revealed = self.mag_phase_join(join).squeeze(1)
-            return (container, container_phase), revealed
+            return (orig_container, orig_container_phase), revealed
         else:
             # If only using one container, reveal and return
             revealed = self.RN(container)
-            return container, revealed
+            return orig_container, revealed

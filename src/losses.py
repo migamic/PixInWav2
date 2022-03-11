@@ -143,7 +143,7 @@ def ssim(img1, img2, window_size = 11, size_average = True):
     
     return _ssim(img1, img2, window, window_size, channel, size_average)
 
-def StegoLoss(secret, cover, container, container_2x, revealed, beta, cover2=None, container2=None, container_2x2=None):
+def StegoLoss(secret, cover, container, container_2x, revealed, beta, cover2=None, container2=None, container_2x2=None, thet=0):
     """
     Our custom StegoLoss function: a convex combination of two reconstruction 
     losses (image: [loss_secret], spectrogram: [loss_cover]) where both terms 
@@ -157,11 +157,8 @@ def StegoLoss(secret, cover, container, container_2x, revealed, beta, cover2=Non
 
     loss_cover = F.mse_loss(cover, container)
     if cover2 is not None:
-        # Loss cover is adding MSEs for the magnitude and phase
-        loss_cover += F.mse_loss(cover2, container2)
-
-        # Try ignoring phase MSE, only use magnitude
-        # loss_cover = F.mse_loss(cover2, container2)
+        # Add MSEs for magnitude and phase, weighted by theta
+        loss_cover = (1-thet) * F.mse_loss(cover2, container2) + thet * loss_cover
     loss_secret = nn.L1Loss()
     loss_spectrum = F.mse_loss(container, container_2x)
     if container_2x2 is not None:

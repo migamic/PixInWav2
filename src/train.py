@@ -29,7 +29,7 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('OUT_PA
          print ("=> Loss did not improve")
 
 
-def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', ft_container='mag'):
+def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', ft_container='mag', thet=0):
 
     # Initialize wandb logs
     wandb.init(project='PixInWavRGB')
@@ -136,7 +136,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
                     container_wav = stft.inverse(containers.squeeze(1), containers_phase.squeeze(1)) # Single waveform with mag and phase modified
                     container_2x_mag = stft.transform(container_wav)[0].unsqueeze(0)
                     container_2x_phase = stft.transform(container_wav)[1].unsqueeze(0)
-                    loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag)
+                    loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag, thet)
 
             # Compute L1 waveform loss. Add it only if specified
             l1_loss = l1wavLoss(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
@@ -275,7 +275,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
 
 
 
-def validate(model, vd_loader, beta, transform='cosine', transform_constructor=None, ft_container='mag', l1_criterion=None, epoch=None, tr_i=None):
+def validate(model, vd_loader, beta, transform='cosine', transform_constructor=None, ft_container='mag', l1_criterion=None, epoch=None, tr_i=None, thet=0):
 
     # Set device
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -360,7 +360,7 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
                     container_wav = transform_constructor.inverse(containers.squeeze(1), containers_phase.squeeze(1)) # Single waveform with mag and phase modified
                     container_2x_mag = transform_constructor.transform(container_wav)[0].unsqueeze(0)
                     container_2x_phase = transform_constructor.transform(container_wav)[1].unsqueeze(0)
-                    loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag)
+                    loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag, thet)
 
 
             # Compute audio and image metrics

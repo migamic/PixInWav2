@@ -75,6 +75,12 @@ parser.add_argument('--ft_container',
                         metavar='STR',
                         help='If [fourier], container to use: [mag], [phase], [magphase]'
                     )
+parser.add_argument('--thet',
+                        type=float,
+                        default=0,
+                        metavar='DOUBLE',
+                        help='Theta hyperparameter (only for magphase)'
+                    )
 parser.add_argument('--mp_encoder',
                         type=str,
                         default='single',
@@ -92,6 +98,12 @@ parser.add_argument('--mp_join',
                         default='mean',
                         metavar='STR',
                         help='If [fourier] and [magphase] and [decoder=double], type of join operation: [mean], [2D], [3D]'
+                    )
+parser.add_argument('--permutation',
+                        type=parse_keyword,
+                        default=False,
+                        metavar='BOOL',
+                        help='Permute the encoded image before adding it to the audio'
                     )
 
 
@@ -115,7 +127,8 @@ if __name__ == '__main__':
         ft_container=args.ft_container,
         mp_encoder=args.mp_encoder,
         mp_decoder=args.mp_decoder,
-        mp_join=args.mp_join
+        mp_join=args.mp_join,
+		permutation=args.permutation
     )
 
     if args.from_checkpoint:
@@ -141,5 +154,6 @@ if __name__ == '__main__':
         summary=args.summary,
         experiment=args.experiment,
         transform=args.transform,
-        ft_container=args.ft_container
+        ft_container=args.ft_container,
+        thet=args.thet
     )
