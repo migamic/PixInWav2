@@ -105,6 +105,12 @@ parser.add_argument('--permutation',
                         metavar='BOOL',
                         help='Permute the encoded image before adding it to the audio'
                     )
+parser.add_argument('--embed',
+                        type=str,
+                        default='stretch',
+                        metavar='STR',
+                        help='Method of adding the image into the audio: [stretch]'
+                    )
 
 
 
@@ -128,7 +134,8 @@ if __name__ == '__main__':
         mp_encoder=args.mp_encoder,
         mp_decoder=args.mp_decoder,
         mp_join=args.mp_join,
-		permutation=args.permutation
+        permutation=args.permutation,
+        embed=args.embed
     )
 
     if args.from_checkpoint:

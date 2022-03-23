@@ -105,9 +105,10 @@ class Up(nn.Module):
 
 
 class PrepHidingNet(nn.Module):
-    def __init__(self, transform='cosine'):
+    def __init__(self, transform='cosine', embed='stretch'):
         super(PrepHidingNet, self).__init__()
         self._transform = transform
+        self.embed = embed
     
         self.pixel_shuffle = nn.PixelShuffle(2)
 
@@ -124,12 +125,15 @@ class PrepHidingNet(nn.Module):
 
         im = self.pixel_shuffle(im)
 
-        # Upsample the image to make it the same shape as the container (different for STDCT and STFT)
-        if self._transform == 'cosine':
-            im_enc = [nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)]
-        elif self._transform == 'fourier':
-            im_enc = [nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)]
-        else: raise Exception(f'Transform not implemented')
+        if self.embed == 'stretch':
+        # Stretch the image to make it the same shape as the container (different for STDCT and STFT)
+            if self._transform == 'cosine':
+                im = nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)
+            elif self._transform == 'fourier':
+                im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
+            else: raise Exception(f'Transform not implemented')
+
+        im_enc = [im]
         
         # Encoder part of the UNet
         for enc_layer_idx, enc_layer in enumerate(self.im_encoder_layers):
@@ -145,14 +149,13 @@ class PrepHidingNet(nn.Module):
 
 
 
-
-
 class RevealNet(nn.Module):
-    def __init__(self, mp_decoder=None):
+    def __init__(self, mp_decoder=None, embed='stretch'):
         super(RevealNet, self).__init__()
 
         self.mp_decoder = mp_decoder
         self.pixel_unshuffle = PixelUnshuffle(2)
+        self.embed = embed
 
         # If mp_decoder == unet, have RevealNet accept 2 channels as input instead of 1
         if self.mp_decoder != 'unet':
@@ -184,13 +187,18 @@ class RevealNet(nn.Module):
         assert not (self.mp_decoder == 'unet'  and ct_phase is None)
         assert not (self.mp_decoder != 'unet'  and ct_phase is not None)
 
-        # Make the container the right size before feeding into the conv layers
-        im_enc = [F.interpolate(ct, size=(256 * 2, 256 * 2))]
+        # Stretch the container to make it the same size as the image
+        if self.embed == 'stretch':
+            ct = F.interpolate(ct, size=(256 * 2, 256 * 2))
+            if self.mp_decoder == 'unet':
+                ct_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
+        
         if self.mp_decoder == 'unet':
-            im_enc_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
-
             # Concatenate mag and phase containers to input to RevealNet
-            im_enc = [torch.cat((im_enc[0], im_enc_phase[0]), 1)]
+            im_enc = [torch.cat((im_enc, im_enc_phase), 1)]
+        else:
+            # Else there is only one container (can be anything)
+            im_enc = [ct]
 
         # Encoder part of the UNet
         for enc_layer_idx, enc_layer in enumerate(self.im_encoder_layers):
@@ -208,13 +216,20 @@ class RevealNet(nn.Module):
         # Pixel Unshuffle and delete 4th component
         revealed = torch.narrow(self.pixel_unshuffle(im_dec[-1]), 1, 0, 3)
 
+        if self.embed == 'blocks':
+            # Undo concatenation and recover a single image
+            (rev1, rev2) = torch.split(revealed, 256, 2)
+            # Return the average
+            revealed = torch.mean(torch.cat((rev1, rev2), 0), 0).unsqueeze(0)
+            # revealed = rev1.add(rev2) * 0.5
+
         return revealed
 
 
 
 
 class StegoUNet(nn.Module):
-    def __init__(self, transform='cosine', ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False):
+    def __init__(self, transform='cosine', ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch'):
 
         super().__init__()
 
@@ -224,13 +239,14 @@ class StegoUNet(nn.Module):
         self.mp_decoder = mp_decoder
         self.mp_join = mp_join
         self.permutation = permutation
+        self.embed = embed
         
         if transform != 'fourier' or ft_container != 'magphase':
             self.mp_decoder = None # For compatiblity with RevealNet
 
         # Sub-networks
-        self.PHN = PrepHidingNet(self.transform)
-        self.RN = RevealNet(self.mp_decoder)
+        self.PHN = PrepHidingNet(self.transform, self.embed)
+        self.RN = RevealNet(self.mp_decoder, self.embed)
         if transform == 'fourier' and ft_container == 'magphase':
             # The previous one is for the magnitude. Create a second one for the phase
             if mp_encoder == 'double':
@@ -257,6 +273,12 @@ class StegoUNet(nn.Module):
         hidden_signal = self.PHN(secret)
         if self.transform == 'fourier' and self.ft_container == 'magphase' and self.mp_encoder == 'double':
             hidden_signal_phase = self.PHN_phase(secret)
+        
+        if self.embed == 'blocks':
+            if self.transform != 'fourier':
+                raise Exception('\'blocks\' embedding is only implemented for STFT')
+            # Replicate the hidden image as many times as required (only two for STFT)
+            hidden_signal = torch.cat((hidden_signal, hidden_signal), 2)
 
         # Permute the encoded image if required
         if self.permutation:
