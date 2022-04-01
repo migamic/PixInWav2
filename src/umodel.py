@@ -157,28 +157,32 @@ class RevealNet(nn.Module):
         self.pixel_unshuffle = PixelUnshuffle(2)
         self.embed = embed
 
-        # If mp_decoder == unet, have RevealNet accept 2 channels as input instead of 1
-        if self.mp_decoder != 'unet':
-            self.im_encoder_layers = nn.ModuleList([
-                Down(1, 64),
-                Down(64, 64 * 2)
-            ])
-        else:
+        # If mp_decoder == unet or concatenating blocks, have RevealNet accept 2 channels as input instead of 1
+        if self.mp_decoder == 'unet' or self.embed == 'blocks3':
             self.im_encoder_layers = nn.ModuleList([
                 Down(2, 64),
                 Down(64, 64 * 2)
             ])
-
-        if self.mp_decoder != 'unet':
-            self.im_decoder_layers = nn.ModuleList([
-                Up(64 * 2, 64),
-                Up(64, 1)
+        else:
+            self.im_encoder_layers = nn.ModuleList([
+                Down(1, 64),
+                Down(64, 64 * 2)
             ])
-        else:    
+
+        if self.mp_decoder == 'unet' or self.embed == 'blocks3':
             self.im_decoder_layers = nn.ModuleList([
                 Up(64 * 2, 64),
                 Up(64, 1, magphase=True)
             ])
+        else:    
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 1)
+            ])
+
+        if self.embed == 'blocks2':
+            self.decblocks = nn.Parameter(torch.rand(2))
+
 
     def forward(self, ct, ct_phase=None):
 
@@ -196,6 +200,10 @@ class RevealNet(nn.Module):
         if self.mp_decoder == 'unet':
             # Concatenate mag and phase containers to input to RevealNet
             im_enc = [torch.cat((im_enc, im_enc_phase), 1)]
+        elif self.embed == 'blocks3':
+            # Undo split and concatenate in another dimension
+            (rep1, rep2) = torch.split(ct, 512, 2)
+            im_enc = [torch.cat((rep1, rep2), 1)]
         else:
             # Else there is only one container (can be anything)
             im_enc = [ct]
@@ -219,9 +227,13 @@ class RevealNet(nn.Module):
         if self.embed == 'blocks':
             # Undo concatenation and recover a single image
             (rev1, rev2) = torch.split(revealed, 256, 2)
-            # Return the average
+            # Average them
             revealed = torch.mean(torch.cat((rev1, rev2), 0), 0).unsqueeze(0)
-            # revealed = rev1.add(rev2) * 0.5
+        elif self.embed == 'blocks2':
+            # Undo concatenation and recover a single image
+            (rev1, rev2) = torch.split(revealed, 256, 2)
+            # Scale and add
+            revealed = rev1*self.decblocks[0] + rev2*self.decblocks[1]
 
         return revealed
 
@@ -258,6 +270,9 @@ class StegoUNet(nn.Module):
                 elif mp_join == '3D':
                     self.mag_phase_join = nn.Conv3d(2,1,1)
 
+        if self.embed == 'blocks2' or self.embed == 'blocks3':
+            self.encblocks = nn.Parameter(torch.rand(2))
+
     def forward(self, secret, cover, cover_phase=None):
 
         # cover_phase is not None if and only if using mag+phase
@@ -274,11 +289,16 @@ class StegoUNet(nn.Module):
         if self.transform == 'fourier' and self.ft_container == 'magphase' and self.mp_encoder == 'double':
             hidden_signal_phase = self.PHN_phase(secret)
         
-        if self.embed == 'blocks':
+        if self.embed == 'blocks' or self.embed == 'blocks2' or self.embed == 'blocks3':
             if self.transform != 'fourier':
                 raise Exception('\'blocks\' embedding is only implemented for STFT')
             # Replicate the hidden image as many times as required (only two for STFT)
-            hidden_signal = torch.cat((hidden_signal, hidden_signal), 2)
+            if self.embed == 'blocks':
+                # Simply duplicate and concat vertically
+                hidden_signal = torch.cat((hidden_signal, hidden_signal), 2)
+            else:
+                # Else also scale with a learnable weight
+                hidden_signal = torch.cat((hidden_signal*self.encblocks[0], hidden_signal*self.encblocks[1]), 2)
 
         # Permute the encoded image if required
         if self.permutation:

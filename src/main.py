@@ -109,7 +109,7 @@ parser.add_argument('--embed',
                         type=str,
                         default='stretch',
                         metavar='STR',
-                        help='Method of adding the image into the audio: [stretch]'
+                        help='Method of adding the image into the audio: [stretch], [blocks], [blocks2], [blocks3]'
                     )
 
 
