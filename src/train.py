@@ -140,8 +140,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
 
             # Compute L1 waveform loss. Add it only if specified
             l1_loss = l1wavLoss(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
-            objective_loss = loss 
-            objective_loss += lam * l1_loss
+            objective_loss = loss + lam * l1_loss
             with torch.autograd.set_detect_anomaly(True):
                 objective_loss.backward()
             optimizer.step()
