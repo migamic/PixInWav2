@@ -82,7 +82,9 @@ class Down(nn.Module):
 
 class Up(nn.Module):
 
-    def __init__(self, in_channels, out_channels, magphase=False):
+    def __init__(self, in_channels, out_channels, opp_channels=-1):
+        # opp_channels -> The number of channels (depth) of the opposite replica of the unet
+        #                   If -1, the same number as the current image is assumed
         super().__init__()
         self.up = nn.Sequential(
             nn.ConvTranspose2d(in_channels , out_channels, kernel_size=3, stride=4, output_padding=0),
@@ -90,10 +92,9 @@ class Up(nn.Module):
             nn.ConvTranspose2d(out_channels , out_channels, kernel_size=3, stride=2, output_padding=1),
             nn.LeakyReLU(0.8, inplace=True),
         )
-        
-        convinput = 3 if magphase else out_channels * 2
-
-        self.conv = DoubleConv(convinput, out_channels)
+        if opp_channels == -1:
+            opp_channels = out_channels
+        self.conv = DoubleConv(opp_channels+out_channels, out_channels)
 
     def forward(self, mix, im_opposite, au_opposite = None):
         mix = self.up(mix)
@@ -112,18 +113,31 @@ class PrepHidingNet(nn.Module):
     
         self.pixel_shuffle = nn.PixelShuffle(2)
 
-        self.im_encoder_layers = nn.ModuleList([
-            Down(1, 64),
-            Down(64, 64 * 2)
-        ])
-        self.im_decoder_layers = nn.ModuleList([
-            Up(64 * 2, 64),
-            Up(64, 1)
-        ])
+        if self.embed == 'multichannel':
+            # In multichannel we get the 3 color channels and output the 8 replicas
+            self.im_encoder_layers = nn.ModuleList([
+                Down(3, 64),
+                Down(64, 64 * 2)
+            ])
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 8, opp_channels=3)
+            ])
+        else:
+            self.im_encoder_layers = nn.ModuleList([
+                Down(1, 64),
+                Down(64, 64 * 2)
+            ])
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 1)
+            ])
+    
     
     def forward(self, im):
 
-        im = self.pixel_shuffle(im)
+        if self.embed != 'multichannel':
+            im = self.pixel_shuffle(im)
 
         if self.embed == 'stretch':
         # Stretch the image to make it the same shape as the container (different for STDCT and STFT)
@@ -163,18 +177,24 @@ class RevealNet(nn.Module):
                 Down(2, 64),
                 Down(64, 64 * 2)
             ])
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 1, opp_channels=2)
+            ])
+        elif self.embed == 'multichannel':
+            self.im_encoder_layers = nn.ModuleList([
+                Down(8, 64),
+                Down(64, 64 * 2)
+            ])
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 3, opp_channels=8)
+            ])
         else:
             self.im_encoder_layers = nn.ModuleList([
                 Down(1, 64),
                 Down(64, 64 * 2)
             ])
-
-        if self.mp_decoder == 'unet' or self.embed == 'blocks3':
-            self.im_decoder_layers = nn.ModuleList([
-                Up(64 * 2, 64),
-                Up(64, 1, magphase=True)
-            ])
-        else:    
             self.im_decoder_layers = nn.ModuleList([
                 Up(64 * 2, 64),
                 Up(64, 1)
@@ -191,6 +211,7 @@ class RevealNet(nn.Module):
         assert not (self.mp_decoder == 'unet'  and ct_phase is None)
         assert not (self.mp_decoder != 'unet'  and ct_phase is not None)
 
+
         # Stretch the container to make it the same size as the image
         if self.embed == 'stretch':
             ct = F.interpolate(ct, size=(256 * 2, 256 * 2))
@@ -204,6 +225,12 @@ class RevealNet(nn.Module):
             # Undo split and concatenate in another dimension
             (rep1, rep2) = torch.split(ct, 512, 2)
             im_enc = [torch.cat((rep1, rep2), 1)]
+        elif self.embed == 'multichannel':
+            # Split the eight replicas and concatenate. 1x1x1024x512 -> 1x8x256x256
+            split1 = torch.split(ct, 256, 3)
+            cat1 = torch.cat(split1, 1)
+            split2 = torch.split(cat1, 256, 2)
+            im_enc = [torch.cat(split2, 1)]
         else:
             # Else there is only one container (can be anything)
             im_enc = [ct]
@@ -222,7 +249,10 @@ class RevealNet(nn.Module):
             )
 
         # Pixel Unshuffle and delete 4th component
-        revealed = torch.narrow(self.pixel_unshuffle(im_dec[-1]), 1, 0, 3)
+        if self.embed == 'multichannel':
+            revealed = im_dec[-1]
+        else:
+            revealed = torch.narrow(self.pixel_unshuffle(im_dec[-1]), 1, 0, 3)
 
         if self.embed == 'blocks':
             # Undo concatenation and recover a single image
@@ -280,9 +310,10 @@ class StegoUNet(nn.Module):
         assert not ((self.transform == 'fourier' and self.ft_container == 'magphase') and cover_phase is None)
         assert not ((self.transform == 'fourier' and self.ft_container != 'magphase') and cover_phase is not None)
 
-        # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-        zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()
-        secret = torch.cat((secret,zero),1)
+        if self.embed != 'multichannel':
+            # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
+            zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()
+            secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
         hidden_signal = self.PHN(secret)
@@ -312,6 +343,15 @@ class StegoUNet(nn.Module):
 
         # Residual connection
         # Also keep a copy of the unpermuted containers to compute the loss
+
+
+        if self.embed == 'multichannel':
+            # Split the 8 channels and replicate. 1x8x256x256 -> 1x1x1024x512
+            split1 = torch.split(hidden_signal, 2, dim=1)
+            cat1 = torch.cat(split1, dim=2)
+            split2 = torch.split(cat1, 1, dim=1)
+            hidden_signal = torch.cat(split2, dim=3)
+        
         container = cover + hidden_signal
         orig_container = container
         if self.transform == 'fourier' and self.ft_container == 'magphase':
