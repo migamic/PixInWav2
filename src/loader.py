@@ -70,11 +70,12 @@ class AudioProcessor():
     Else, if transform is [fourier] returns the STFT magnitude
     and phase.
     """
-    def __init__(self, transform):
+    def __init__(self, transform, random_init=True):
         # Corresponds to 1.5 seconds approximately
         self._limit = 67522 # 2 ** 16 + 2 ** 11 - 2 ** 6 + 2
         self._frame_length = 2 ** 12 if transform == 'cosine' else 2 ** 11 - 1
         self._frame_step = 2 ** 6 - 2 if transform == 'cosine' else 132
+        self.random_init = random_init
 
         self._transform = transform
         if self._transform == 'fourier':
@@ -96,7 +97,10 @@ class AudioProcessor():
         if sound.numel() < self._limit:
             tmp[:sound.numel()] = sound[:]
         else:
-            i = random.randint(0, len(sound) - self._limit)
+            if self.random_init:
+                i = random.randint(0, len(sound) - self._limit)
+            else:
+                i = 0
             tmp[:] = sound[i:i + self._limit]
         if self._transform == 'cosine':
             return sdct_torch(
