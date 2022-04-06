@@ -330,7 +330,13 @@ class StegoUNet(nn.Module):
             else:
                 # Else also scale with a learnable weight
                 hidden_signal = torch.cat((hidden_signal*self.encblocks[0], hidden_signal*self.encblocks[1]), 2)
-
+        elif self.embed == 'multichannel':
+            # Split the 8 channels and replicate. 1x8x256x256 -> 1x1x1024x512
+            split1 = torch.split(hidden_signal, 2, dim=1)
+            cat1 = torch.cat(split1, dim=2)
+            split2 = torch.split(cat1, 1, dim=1)
+            hidden_signal = torch.cat(split2, dim=3)
+        
         # Permute the encoded image if required
         if self.permutation:
             # Generate permutation index, which will be reused for the inverse
@@ -343,15 +349,6 @@ class StegoUNet(nn.Module):
 
         # Residual connection
         # Also keep a copy of the unpermuted containers to compute the loss
-
-
-        if self.embed == 'multichannel':
-            # Split the 8 channels and replicate. 1x8x256x256 -> 1x1x1024x512
-            split1 = torch.split(hidden_signal, 2, dim=1)
-            cat1 = torch.cat(split1, dim=2)
-            split2 = torch.split(cat1, 1, dim=1)
-            hidden_signal = torch.cat(split2, dim=3)
-        
         container = cover + hidden_signal
         orig_container = container
         if self.transform == 'fourier' and self.ft_container == 'magphase':
