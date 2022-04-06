@@ -91,17 +91,26 @@ class AudioProcessor():
         
         # Get the samples dimension
         sound = self.sound[0]
+
         # Create a temporary array
         tmp = torch.zeros([self._limit, ]).normal_(mean = 0, std = 0.005)
-        # Cut the audio on limit
+
+        # Check if the audio is shorter than the limit
         if sound.numel() < self._limit:
-            tmp[:sound.numel()] = sound[:]
+            # Zero-pad at the end, or randomly at both start and end
+            if self.random_init:
+                i = random.randint(0, self._limit - len(sound))
+                tmp[i:i+sound.numel()] = sound[:]
+            else:
+                tmp[:sound.numel()] = sound[:]
         else:
+            # Use only part of the audio. Either start at beginning or random
             if self.random_init:
                 i = random.randint(0, len(sound) - self._limit)
             else:
                 i = 0
             tmp[:] = sound[i:i + self._limit]
+
         if self._transform == 'cosine':
             return sdct_torch(
                 tmp.type(torch.float32),
@@ -111,8 +120,8 @@ class AudioProcessor():
         elif self._transform == 'fourier':
             magnitude, phase = self.stft.transform(tmp.unsqueeze(0).type(torch.float32))
             return magnitude, phase
-
         else: raise Exception(f'Transform not implemented')
+
 
 class StegoDataset(torch.utils.data.Dataset):
     """
