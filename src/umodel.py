@@ -24,9 +24,16 @@ from pystct import sdct_torch, isdct_torch
 
 def rgb_to_ycbcr(img):
     # img is mini-batch N x 3 x H x W of an RGB image
-    output = Variable(img.data.new(*img.size()))
-    output[:, 0, :, :] = img[:, 0, :, :] * 65.481 + img[:, 1, :, :] * 128.553 + img[:, 2, :, :] * 24.966 + 16
-    # similarly write output[:, 1, :, :] and output[:, 2, :, :] using formulas from https://en.wikipedia.org/wiki/YCbCr
+    output = torch.zeros(img.shape).to(img.device)
+
+    # output[:, 0, :, :] = img[:, 0, :, :] * 65.481 + img[:, 1, :, :] * 128.553 + img[:, 2, :, :] * 24.966 + 16
+    # output[:, 1, :, :] = img[:, 0, :, :] * -37.797 + img[:, 1, :, :] * 74.203 + img[:, 2, :, :] * 112.0 + 128
+    # output[:, 2, :, :] = img[:, 0, :, :] * 112.0 + img[:, 1, :, :] * 93.786 + img[:, 2, :, :] * 18.214 + 128
+
+    output[:, 0, :, :] = img[:, 0, :, :] * 0.299 + img[:, 1, :, :] * 0.587 + img[:, 2, :, :] * 0.114
+    output[:, 1, :, :] = img[:, 0, :, :] * 0.168736 + img[:, 1, :, :] * -0.331264 + img[:, 2, :, :] * 0.5
+    output[:, 2, :, :] = img[:, 0, :, :] * 0.5 + img[:, 1, :, :] * -0.418688 + img[:, 2, :, :] * -0.081312
+
     return output
 
 
@@ -150,7 +157,7 @@ class PrepHidingNet(nn.Module):
         if self.embed != 'multichannel':
             im = self.pixel_shuffle(im)
 
-        if self.embed == 'stretch':
+        if self.embed == 'stretch' or self.embed == 'luma':
         # Stretch the image to make it the same shape as the container (different for STDCT and STFT)
             if self._transform == 'cosine':
                 im = nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)
@@ -259,10 +266,31 @@ class RevealNet(nn.Module):
                 im_enc[-1 - dec_layer_idx])
             )
 
-        # Pixel Unshuffle and delete 4th component
         if self.embed == 'multichannel':
+            # The revealed image is the output of the U-Net
             revealed = im_dec[-1]
+        elif self.embed == 'luma':
+            # Convert RGB to YUV, average lumas and back to RGB
+            unshuffled = self.pixel_unshuffle(im_dec[-1])
+            print('unshuffled:', unshuffled.shape)
+            rgbs = torch.narrow(unshuffled, 1, 0, 3)
+            luma = unshuffled[:,3,:,:]
+            print('rgbs:', rgbs.shape)
+            print('luma:', luma.shape)
+
+            yuvs = rgb_to_ycbcr(rgbs)
+            print('yuvs:', yuvs.shape)
+            print('dev yuvs:', yuvs.device)
+            print('dev rgbs:', rgbs.device)
+            print('dev luma:', luma.device)
+
+            yuvs[:,0,:,:] = 0.5*yuvs[:,0,:,:] + 0.5*luma
+            print('yuvs:', yuvs.shape)
+            assert(False)
+
+            revealed = ycbcr_to_rgb(yuvs)
         else:
+            # Pixel Unshuffle and delete 4th component
             revealed = torch.narrow(self.pixel_unshuffle(im_dec[-1]), 1, 0, 3)
 
         if self.embed == 'blocks':
@@ -327,6 +355,7 @@ class StegoUNet(nn.Module):
                 # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
                 lumas = rgb_to_ycbcr(secret)
                 # Only keep the luma channel
+                lumas = lumas[:,0,:,:].unsqueeze(1).cuda()
                 secret = torch.cat((secret,lumas),1)
             else:
                 # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
