@@ -23,11 +23,11 @@ from pystct import sdct_torch, isdct_torch
 
 
 def rgb_to_ycbcr(img):
-  # img is mini-batch N x 3 x H x W of an RGB image
-  output = Variable(img.data.new(*img.size()))
-  output[:, 0, :, :] = img[:, 0, :, :] * 65.481 + img[:, 1, :, :] * 128.553 + img[:, 2, :, :] * 24.966 + 16
-  # similarly write output[:, 1, :, :] and output[:, 2, :, :] using formulas from https://en.wikipedia.org/wiki/YCbCr
-  return output
+    # img is mini-batch N x 3 x H x W of an RGB image
+    output = Variable(img.data.new(*img.size()))
+    output[:, 0, :, :] = img[:, 0, :, :] * 65.481 + img[:, 1, :, :] * 128.553 + img[:, 2, :, :] * 24.966 + 16
+    # similarly write output[:, 1, :, :] and output[:, 2, :, :] using formulas from https://en.wikipedia.org/wiki/YCbCr
+    return output
 
 
 def pixel_unshuffle(img, downscale_factor):
@@ -322,9 +322,16 @@ class StegoUNet(nn.Module):
         assert not ((self.transform == 'fourier' and self.ft_container != 'magphase') and cover_phase is not None)
 
         if self.embed != 'multichannel':
-            # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-            zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()
-            secret = torch.cat((secret,zero),1)
+            if self.embed == 'luma':
+                pass
+                # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
+                lumas = rgb_to_ycbcr(secret)
+                # Only keep the luma channel
+                secret = torch.cat((secret,lumas),1)
+            else:
+                # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
+                zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()
+                secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
         hidden_signal = self.PHN(secret)
