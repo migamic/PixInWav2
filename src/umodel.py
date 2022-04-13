@@ -2,6 +2,7 @@
 umodel.py
 
 * Auxiliary functions:
+    - RGB to YCbCr
     - Pixel unshuffle
     - Convolution layers
 * Subnets:
@@ -17,6 +18,16 @@ import torch.nn as nn
 from torch import utils
 import torch.nn.functional as F
 from pystct import sdct_torch, isdct_torch
+
+
+
+
+def rgb_to_ycbcr(img):
+  # img is mini-batch N x 3 x H x W of an RGB image
+  output = Variable(img.data.new(*img.size()))
+  output[:, 0, :, :] = img[:, 0, :, :] * 65.481 + img[:, 1, :, :] * 128.553 + img[:, 2, :, :] * 24.966 + 16
+  # similarly write output[:, 1, :, :] and output[:, 2, :, :] using formulas from https://en.wikipedia.org/wiki/YCbCr
+  return output
 
 
 def pixel_unshuffle(img, downscale_factor):
