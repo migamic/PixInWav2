@@ -23,19 +23,28 @@ from pystct import sdct_torch, isdct_torch
 
 
 def rgb_to_ycbcr(img):
+    # Taken from https://www.w3.org/Graphics/JPEG/jfif3.pdf
     # img is mini-batch N x 3 x H x W of an RGB image
+
     output = torch.zeros(img.shape).to(img.device)
 
-    # output[:, 0, :, :] = img[:, 0, :, :] * 65.481 + img[:, 1, :, :] * 128.553 + img[:, 2, :, :] * 24.966 + 16
-    # output[:, 1, :, :] = img[:, 0, :, :] * -37.797 + img[:, 1, :, :] * 74.203 + img[:, 2, :, :] * 112.0 + 128
-    # output[:, 2, :, :] = img[:, 0, :, :] * 112.0 + img[:, 1, :, :] * 93.786 + img[:, 2, :, :] * 18.214 + 128
-
-    output[:, 0, :, :] = img[:, 0, :, :] * 0.299 + img[:, 1, :, :] * 0.587 + img[:, 2, :, :] * 0.114
-    output[:, 1, :, :] = img[:, 0, :, :] * 0.168736 + img[:, 1, :, :] * -0.331264 + img[:, 2, :, :] * 0.5
-    output[:, 2, :, :] = img[:, 0, :, :] * 0.5 + img[:, 1, :, :] * -0.418688 + img[:, 2, :, :] * -0.081312
+    output[:,0,:,:] =  0.2990 * img[:,0,:,:] + 0.5870 * img[:,1,:,:] + 0.1114 * img[:,2,:,:]
+    output[:,1,:,:] = -0.1687 * img[:,0,:,:] - 0.3313 * img[:,1,:,:] + 0.5000 * img[:,2,:,:] + 128
+    output[:,2,:,:] =  0.5000 * img[:,0,:,:] - 0.4187 * img[:,1,:,:] - 0.0813 * img[:,2,:,:] + 128
 
     return output
 
+def ycbcr_to_rgb(img):
+    # Taken from https://www.w3.org/Graphics/JPEG/jfif3.pdf
+    # img is mini-batch N x 3 x H x W of a YCbCr image
+
+    output = torch.zeros(img.shape).to(img.device)
+
+    output[:,0,:,:] =  img[:,0,:,:] + 1.40200 * (img[:,2,:,:]-128)
+    output[:,1,:,:] =  img[:,0,:,:] - 0.34414 * (img[:,1,:,:]-128) - 0.71414*(img[:,2,:,:]-128)
+    output[:,2,:,:] =  img[:,0,:,:] + 1.77200 * (img[:,1,:,:]-128)
+
+    return output
 
 def pixel_unshuffle(img, downscale_factor):
     '''
@@ -343,7 +352,6 @@ class StegoUNet(nn.Module):
             self.encblocks = nn.Parameter(torch.rand(2))
 
     def forward(self, secret, cover, cover_phase=None):
-
         # cover_phase is not None if and only if using mag+phase
         # If using the phase only, 'cover' is actually the phase!
         assert not ((self.transform == 'fourier' and self.ft_container == 'magphase') and cover_phase is None)
