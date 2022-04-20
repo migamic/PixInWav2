@@ -240,7 +240,7 @@ class RevealNet(nn.Module):
 
 
         # Stretch the container to make it the same size as the image
-        if self.embed == 'stretch':
+        if self.embed == 'stretch' or self.embed == 'luma':
             ct = F.interpolate(ct, size=(256 * 2, 256 * 2))
             if self.mp_decoder == 'unet':
                 ct_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
@@ -281,21 +281,11 @@ class RevealNet(nn.Module):
         elif self.embed == 'luma':
             # Convert RGB to YUV, average lumas and back to RGB
             unshuffled = self.pixel_unshuffle(im_dec[-1])
-            print('unshuffled:', unshuffled.shape)
             rgbs = torch.narrow(unshuffled, 1, 0, 3)
             luma = unshuffled[:,3,:,:]
-            print('rgbs:', rgbs.shape)
-            print('luma:', luma.shape)
 
             yuvs = rgb_to_ycbcr(rgbs)
-            print('yuvs:', yuvs.shape)
-            print('dev yuvs:', yuvs.device)
-            print('dev rgbs:', rgbs.device)
-            print('dev luma:', luma.device)
-
             yuvs[:,0,:,:] = 0.5*yuvs[:,0,:,:] + 0.5*luma
-            print('yuvs:', yuvs.shape)
-            assert(False)
 
             revealed = ycbcr_to_rgb(yuvs)
         else:
