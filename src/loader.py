@@ -93,7 +93,7 @@ class AudioProcessor():
         sound = self.sound[0]
 
         # Create a temporary array
-        tmp = torch.zeros([self._limit, ]).normal_(mean = 0, std = 0.005)
+        tmp = torch.zeros([self._limit, ])
 
         # Check if the audio is shorter than the limit
         if sound.numel() < self._limit:
