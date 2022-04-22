@@ -63,6 +63,12 @@ parser.add_argument('--num_epochs',
                         metavar='INT',
                         help='Number of training epochs'
                     )
+parser.add_argument('--batch_size',
+                        type=int,
+                        default=1,
+                        metavar='INT',
+                        help='Size of the data batch'
+                    )
 parser.add_argument('--experiment',
                         type=int,
                         default=0,
@@ -140,10 +146,12 @@ if __name__ == '__main__':
     train_loader = loader(
         set='train',
         transform=args.transform,
+        batch_size=args.batch_size,
     )
     test_loader = loader(
         set='test',
         transform=args.transform,
+        batch_size=args.batch_size,
     )
 
     model = StegoUNet(

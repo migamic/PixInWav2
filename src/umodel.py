@@ -357,7 +357,7 @@ class StegoUNet(nn.Module):
                 secret = torch.cat((secret,lumas),1)
             else:
                 # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-                zero = torch.zeros(1, 1, 256, 256).type(torch.float32).cuda()
+                zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).cuda()
                 secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
