@@ -445,4 +445,7 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
     print('                    %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1))
     print()
 
+    # Reset model to training mode
+    model.train()
+
     return avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1
