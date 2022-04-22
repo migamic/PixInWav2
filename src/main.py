@@ -57,6 +57,12 @@ parser.add_argument('--val_size',
                         metavar='INT',
                         help='Steps of every validation round'
                     )
+parser.add_argument('--num_epochs',
+                        type=int,
+                        default=8,
+                        metavar='INT',
+                        help='Number of training epochs'
+                    )
 parser.add_argument('--experiment',
                         type=int,
                         default=0,
@@ -166,7 +172,7 @@ if __name__ == '__main__':
         beta=args.beta,
         lam=args.lam,
         lr=args.lr,
-        epochs=2,
+        epochs=args.num_epochs,
         val_itvl=args.val_itvl,
         val_size=args.val_size,
         slide=15,
