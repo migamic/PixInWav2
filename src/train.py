@@ -232,6 +232,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
                 }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'), f'models/checkpoint_run_{experiment}.pt'))
     
                 # Print headers again to resume training
+                print()
                 print(' Iter.     Time  Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
         
         # Print average validation results after every epoch
@@ -278,11 +279,9 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
 
     # Set device
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f'Using device: {device}')
     
     # Parallelize on GPU
     if torch.cuda.device_count() > 1:
-          print("Let's use", torch.cuda.device_count(), "GPUs!")
           model = nn.DataParallel(model)
 
     model.to(device)
@@ -297,7 +296,6 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
     # Start validating ...
     iniv = time.time()
     with torch.no_grad():
-        print('Validating current model...')
         for i, data in enumerate(vd_loader):
 
             # Load data from the loader
@@ -393,20 +391,8 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
             valid_ssim.append(ssim_image.detach().item())
             valid_l1.append(l1_loss.detach().item())
 
-            # print(
-            #     f'(#{i})[{np.round(time.time()-iniv,2)}s]\
-            #     Valid Loss {loss.detach().item()},\
-            #     cover_error {loss_cover.detach().item()},\
-            #     secret_error {loss_secret.detach().item()},\
-            #     spectrum_error {loss_spectrum.detach().item()},\
-            #     SNR {vd_snr_audio},\
-            #     PSNR {vd_psnr_image.detach().item()},\
-            #     SSIM {ssim_image.detach().item()},\
-            #     L1 {l1_loss.detach().item()}'
-            # )
-
+            # Stop validation after 500 steps
             if i >= 500: break
-            # if i >= vd_datalen: break
 
         avg_valid_loss = np.mean(valid_loss)
         avg_valid_loss_cover = np.mean(valid_loss_cover)
@@ -427,7 +413,6 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
             'vd_SSIM': avg_valid_ssim,
             'vd_L1': avg_valid_l1
         })
-        print(f"Validation took {time.time() - iniv} seconds")
 
     del valid_loss
     del valid_loss_cover
