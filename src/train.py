@@ -29,7 +29,7 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('OUT_PA
          print ("=> Loss did not improve")
 
 
-def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', ft_container='mag', thet=0):
+def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, val_size=50, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', ft_container='mag', thet=0):
 
     # Initialize wandb logs
     wandb.init(project='PixInWavRGB')
@@ -194,9 +194,9 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
                 'L1': avg_l1_loss,
             })
 
-            # Every 50 iterations, do a validation step
-            if (i % 50 == 0) and (i != 0):
-                avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1 = validate(model, vd_loader, beta, transform=transform, transform_constructor=stft if transform=='fourier' else None, ft_container=ft_container, l1_criterion=l1wavLoss, tr_i=i, epoch=epoch)
+            # Every 'val_itvl' iterations, do a validation step
+            if (i % val_itvl == 0) and (i != 0):
+                avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1 = validate(model, vd_loader, beta, val_size=val_size, transform=transform, transform_constructor=stft if transform=='fourier' else None, ft_container=ft_container, l1_criterion=l1wavLoss, tr_i=i, epoch=epoch)
                 
                 vd_loss.append(avg_valid_loss) 
                 vd_loss_cover.append(avg_valid_loss_cover) 
@@ -275,7 +275,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, prev_epoch = Non
 
 
 
-def validate(model, vd_loader, beta, transform='cosine', transform_constructor=None, ft_container='mag', l1_criterion=None, epoch=None, tr_i=None, thet=0):
+def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_constructor=None, ft_container='mag', l1_criterion=None, epoch=None, tr_i=None, thet=0):
 
     # Set device
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -391,8 +391,8 @@ def validate(model, vd_loader, beta, transform='cosine', transform_constructor=N
             valid_ssim.append(ssim_image.detach().item())
             valid_l1.append(l1_loss.detach().item())
 
-            # Stop validation after 500 steps
-            if i >= 500: break
+            # Stop validation after val_size steps
+            if i >= val_size: break
 
         avg_valid_loss = np.mean(valid_loss)
         avg_valid_loss_cover = np.mean(valid_loss_cover)

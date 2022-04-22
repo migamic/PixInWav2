@@ -45,6 +45,18 @@ parser.add_argument('--lr',
                         metavar='DOUBLE',
                         help='Learning rate hyperparameter'
                     )
+parser.add_argument('--val_itvl',
+                        type=int,
+                        default=500,
+                        metavar='INT',
+                        help='After how many training steps to do validation'
+                    )
+parser.add_argument('--val_size',
+                        type=int,
+                        default=50,
+                        metavar='INT',
+                        help='Steps of every validation round'
+                    )
 parser.add_argument('--experiment',
                         type=int,
                         default=0,
@@ -155,6 +167,8 @@ if __name__ == '__main__':
         lam=args.lam,
         lr=args.lr,
         epochs=2,
+        val_itvl=args.val_itvl,
+        val_size=args.val_size,
         slide=15,
         prev_epoch=checkpoint['epoch'] if args.from_checkpoint else None,
         prev_i=checkpoint['i'] if args.from_checkpoint else None,
