@@ -123,19 +123,19 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                 if ft_container == 'mag':
                     original_wav = stft.inverse(covers.squeeze(1), phase.squeeze(1))
                     container_wav = stft.inverse(containers.squeeze(1), phase.squeeze(1))
-                    container_2x = stft.transform(container_wav)[0].unsqueeze(0)
+                    container_2x = stft.transform(container_wav)[0].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, covers, containers, container_2x, revealed, beta)
                 elif ft_container == 'phase':
                     original_wav = stft.inverse(covers.squeeze(1), phase.squeeze(1))
                     container_wav = stft.inverse(covers.squeeze(1), containers.squeeze(1))
-                    container_2x = stft.transform(container_wav)[1].unsqueeze(0)
+                    container_2x = stft.transform(container_wav)[1].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers, container_2x, revealed, beta)
                 elif ft_container == 'magphase':
                     # Using magnitude+phase. Compute both MSEs
                     original_wav = stft.inverse(covers.squeeze(1), phase.squeeze(1))
                     container_wav = stft.inverse(containers.squeeze(1), containers_phase.squeeze(1)) # Single waveform with mag and phase modified
-                    container_2x_mag = stft.transform(container_wav)[0].unsqueeze(0)
-                    container_2x_phase = stft.transform(container_wav)[1].unsqueeze(0)
+                    container_2x_mag = stft.transform(container_wav)[0].unsqueeze(1)
+                    container_2x_phase = stft.transform(container_wav)[1].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag, thet)
 
             # Compute L1 waveform loss. Add it only if specified
@@ -282,7 +282,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
     
     # Parallelize on GPU
     if torch.cuda.device_count() > 1:
-          model = nn.DataParallel(model)
+        model = nn.DataParallel(model).cuda()
 
     model.to(device)
 
@@ -358,7 +358,6 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
                     container_2x_mag = transform_constructor.transform(container_wav)[0].unsqueeze(0)
                     container_2x_phase = transform_constructor.transform(container_wav)[1].unsqueeze(0)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag, thet)
-
 
             # Compute audio and image metrics
             if (transform != 'fourier') or (ft_container != 'magphase'):

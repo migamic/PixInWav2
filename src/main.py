@@ -151,7 +151,7 @@ if __name__ == '__main__':
     test_loader = loader(
         set='test',
         transform=args.transform,
-        batch_size=args.batch_size,
+        batch_size=1,
     )
 
     model = StegoUNet(
