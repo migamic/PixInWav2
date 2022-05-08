@@ -29,7 +29,7 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('OUT_PA
          print ("=> Loss did not improve")
 
 
-def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, val_size=50, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', ft_container='mag', thet=0):
+def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, val_size=50, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', stft_small=True, ft_container='mag', thet=0):
 
     # Initialize wandb logs
     wandb.init(project='PixInWavRGB')
@@ -68,9 +68,9 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
     # Initialize STFT transform constructor
     if transform == 'fourier':
         stft = STFT(
-            filter_length=2 ** 11 - 1,
-            hop_length=132,
-            win_length=2 ** 11 - 1,
+            filter_length = 2**11 - 1 if stft_small else 2**12 - 1,
+            hop_length = 132 if stft_small else 66,
+            win_length = 2**11 - 1 if stft_small else 2**12 - 1,
             window='hann'
         ).to(device)
         stft.num_samples = 67522

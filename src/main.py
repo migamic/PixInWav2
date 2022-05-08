@@ -93,6 +93,12 @@ parser.add_argument('--transform',
                         metavar='STR',
                         help='Which transform to use: [cosine] or [fourier]'
                     )
+parser.add_argument('--stft_small',
+                        type=parse_keyword,
+                        default=True,
+                        metavar='BOOL',
+                        help='If [fourier], whether to use a small or large container'
+                    )
 parser.add_argument('--ft_container',
                         type=str,
                         default='mag',
@@ -146,16 +152,19 @@ if __name__ == '__main__':
     train_loader = loader(
         set='train',
         transform=args.transform,
+        stft_small=args.stft_small,
         batch_size=args.batch_size,
     )
     test_loader = loader(
         set='test',
         transform=args.transform,
+        stft_small=args.stft_small,
         batch_size=1,
     )
 
     model = StegoUNet(
         transform=args.transform,
+        stft_small=args.stft_small,
         ft_container=args.ft_container,
         mp_encoder=args.mp_encoder,
         mp_decoder=args.mp_decoder,
@@ -189,6 +198,7 @@ if __name__ == '__main__':
         summary=args.summary,
         experiment=args.experiment,
         transform=args.transform,
+        stft_small=args.stft_small,
         ft_container=args.ft_container,
         thet=args.thet
     )

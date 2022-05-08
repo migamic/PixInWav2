@@ -133,9 +133,10 @@ class Up(nn.Module):
 
 
 class PrepHidingNet(nn.Module):
-    def __init__(self, transform='cosine', embed='stretch'):
+    def __init__(self, transform='cosine', stft_small=True, embed='stretch'):
         super(PrepHidingNet, self).__init__()
         self._transform = transform
+        self._stft_small = stft_small
         self.embed = embed
     
         self.pixel_shuffle = nn.PixelShuffle(2)
@@ -146,10 +147,16 @@ class PrepHidingNet(nn.Module):
                 Down(3, 64),
                 Down(64, 64 * 2)
             ])
-            self.im_decoder_layers = nn.ModuleList([
-                Up(64 * 2, 64),
-                Up(64, 8, opp_channels=3)
-            ])
+            if self._stft_small:
+                self.im_decoder_layers = nn.ModuleList([
+                    Up(64 * 2, 64),
+                    Up(64, 8, opp_channels=3)
+                ])
+            else:
+                self.im_decoder_layers = nn.ModuleList([
+                    Up(64 * 2, 64),
+                    Up(64, 32, opp_channels=3)
+                ])
         else:
             self.im_encoder_layers = nn.ModuleList([
                 Down(1, 64),
@@ -171,7 +178,10 @@ class PrepHidingNet(nn.Module):
             if self._transform == 'cosine':
                 im = nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)
             elif self._transform == 'fourier':
-                im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
+                if self._stft_small:
+                    im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
+                else:
+                    im = nn.Upsample(scale_factor=(4, 2), mode='bilinear',align_corners=True)(im)
             else: raise Exception(f'Transform not implemented')
 
         im_enc = [im]
@@ -191,11 +201,12 @@ class PrepHidingNet(nn.Module):
 
 
 class RevealNet(nn.Module):
-    def __init__(self, mp_decoder=None, embed='stretch'):
+    def __init__(self, mp_decoder=None, stft_small=True, embed='stretch'):
         super(RevealNet, self).__init__()
 
         self.mp_decoder = mp_decoder
         self.pixel_unshuffle = PixelUnshuffle(2)
+        self._stft_small = stft_small
         self.embed = embed
 
         # If mp_decoder == unet or concatenating blocks, have RevealNet accept 2 channels as input instead of 1
@@ -209,14 +220,24 @@ class RevealNet(nn.Module):
                 Up(64, 1, opp_channels=2)
             ])
         elif self.embed == 'multichannel':
-            self.im_encoder_layers = nn.ModuleList([
-                Down(8, 64),
-                Down(64, 64 * 2)
-            ])
-            self.im_decoder_layers = nn.ModuleList([
-                Up(64 * 2, 64),
-                Up(64, 3, opp_channels=8)
-            ])
+            if self._stft_small:
+                self.im_encoder_layers = nn.ModuleList([
+                    Down(8, 64),
+                    Down(64, 64 * 2)
+                ])
+                self.im_decoder_layers = nn.ModuleList([
+                    Up(64 * 2, 64),
+                    Up(64, 3, opp_channels=8)
+                ])
+            else:
+                self.im_encoder_layers = nn.ModuleList([
+                    Down(32, 64),
+                    Down(64, 64 * 2)
+                ])
+                self.im_decoder_layers = nn.ModuleList([
+                    Up(64 * 2, 64),
+                    Up(64, 3, opp_channels=32)
+                ])
         else:
             self.im_encoder_layers = nn.ModuleList([
                 Down(1, 64),
@@ -309,11 +330,12 @@ class RevealNet(nn.Module):
 
 
 class StegoUNet(nn.Module):
-    def __init__(self, transform='cosine', ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch'):
+    def __init__(self, transform='cosine', stft_small=True, ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch'):
 
         super().__init__()
 
         self.transform = transform
+        self.stft_small = stft_small
         self.ft_container = ft_container
         self.mp_encoder = mp_encoder
         self.mp_decoder = mp_decoder
@@ -325,8 +347,8 @@ class StegoUNet(nn.Module):
             self.mp_decoder = None # For compatiblity with RevealNet
 
         # Sub-networks
-        self.PHN = PrepHidingNet(self.transform, self.embed)
-        self.RN = RevealNet(self.mp_decoder, self.embed)
+        self.PHN = PrepHidingNet(self.transform, self.stft_small, self.embed)
+        self.RN = RevealNet(self.mp_decoder, self.stft_small, self.embed)
         if transform == 'fourier' and ft_container == 'magphase':
             # The previous one is for the magnitude. Create a second one for the phase
             if mp_encoder == 'double':
@@ -377,7 +399,10 @@ class StegoUNet(nn.Module):
                 hidden_signal = torch.cat((hidden_signal*self.encblocks[0], hidden_signal*self.encblocks[1]), 2)
         elif self.embed == 'multichannel':
             # Split the 8 channels and replicate. 1x8x256x256 -> 1x1x1024x512
-            split1 = torch.split(hidden_signal, 2, dim=1)
+            if self.stft_small:
+                split1 = torch.split(hidden_signal, 2, dim=1)
+            else:
+                split1 = torch.split(hidden_signal, 4, dim=1)
             cat1 = torch.cat(split1, dim=2)
             split2 = torch.split(cat1, 1, dim=1)
             hidden_signal = torch.cat(split2, dim=3)

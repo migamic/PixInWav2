@@ -70,11 +70,20 @@ class AudioProcessor():
     Else, if transform is [fourier] returns the STFT magnitude
     and phase.
     """
-    def __init__(self, transform, random_init=True):
+    def __init__(self, transform, stft_small=True, random_init=True):
         # Corresponds to 1.5 seconds approximately
         self._limit = 67522 # 2 ** 16 + 2 ** 11 - 2 ** 6 + 2
-        self._frame_length = 2 ** 12 if transform == 'cosine' else 2 ** 11 - 1
-        self._frame_step = 2 ** 6 - 2 if transform == 'cosine' else 132
+        if transform == 'cosine':
+            self._frame_length = 2 ** 12
+            self._frame_step = 2 ** 6 - 2
+        else:
+            if stft_small:
+                self._frame_length = 2 ** 11 - 1
+                self._frame_step = 2 ** 7 + 4
+            else:
+                self._frame_length = 2 ** 12 - 1
+                self._frame_step = 2 ** 6 + 2
+
         self.random_init = random_init
 
         self._transform = transform
@@ -150,6 +159,7 @@ class StegoDataset(torch.utils.data.Dataset):
         mappings: dict,
         rgb: bool = True,
         transform: str = 'cosine',
+        stft_small: bool = True,
         image_extension: str = "JPEG",
         audio_extension: str = "wav"
     ):
@@ -162,6 +172,7 @@ class StegoDataset(torch.utils.data.Dataset):
         self._MAX_AUDIO_LIMIT = 17584 if folder == 'train' else 946
         self._colorspace = 'RGB' if rgb else 'L'
         self._transform = transform
+        self._stft_small = stft_small
 
         print(f'IMAGE DATA LOCATED AT: {self._image_data_path}')
         print(f'AUDIO DATA LOCATED AT: {self._audio_data_path}')
@@ -210,7 +221,7 @@ class StegoDataset(torch.utils.data.Dataset):
             if (self._index_aud == self._MAX_AUDIO_LIMIT): break
 
 
-        self._AUDIO_PROCESSOR = AudioProcessor(transform=self._transform)
+        self._AUDIO_PROCESSOR = AudioProcessor(transform=self._transform, stft_small=self._stft_small)
 
         print('Set up done')
 
@@ -235,7 +246,7 @@ class StegoDataset(torch.utils.data.Dataset):
             return (img, magnitude_stft, phase_stft)
         else: raise Exception(f'Transform not implemented')
 
-def loader(set='train', rgb=True, transform='cosine', batch_size=1):
+def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_size=1):
     """
     Prepares the custom dataloader.
     - [set] defines the set type. Can be either [train] or [test].
@@ -257,7 +268,8 @@ def loader(set='train', rgb=True, transform='cosine', batch_size=1):
         folder=set,
         mappings=mappings,
         rgb=rgb,
-        transform=transform
+        transform=transform,
+        stft_small=stft_small
     )
 
     print('Dataset prepared.')
