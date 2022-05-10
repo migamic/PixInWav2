@@ -29,3 +29,47 @@ It has been rewritten from scratch, but expect much overlap with the original co
 * Fix validation data loading, that was using the same images from the training set.
 * Fix audio preprocessing: remove padding bias and noise.
 * Set the model in training mode during training (used to be in 'eval'). Remove batch norm since it made the performance worse.
+
+
+## Repository outline
+All the code files are in the `src` directory. These have been renamed from the original code and redundant code files have been removed.
+* `main.py`: script to run the overall training process.
+* `umodel.py`: the complete PixInWav model.
+* `train.py`: responsible for the training and validation of the given model.
+* `loader.py`: loader script to create the data set from the images and audios.
+* `losses.py`: losses and metrics for training and validation.
+* `pystct.py`: computes the STDCT.
+* `visualization.py`: functions for plotting the validation results during training.
+
+In the `scripts` directory there is `srun_train.sh`, an example of a shell script to run the code with all the new flags.
+
+
+## Usage
+Refer to the [original repo](https://github.com/margaritageleta/PixInWav) for usage instruction. This section only details the flags accepted by `main.py`, since many have changed.
+
+### Generic flags
+* `experiment` sets the experiment number, which will be used when saving/loading checkpoints.
+* `summary` gives a name to the current experiment that will be shown in Weights and Biases.
+* `output` specifies a text file where the stardard output should be printed.
+* `from_checkpoint` allows loading an existing model from a checkpoint instead of starting the training process anew.
+
+### Training hyperparameters
+* `lr` sets the learning rate.
+* Use `val_itvl` and `val_size` to control after how many training iterations to perform validation and how many validation iterations should there be.
+* Use `num_epochs` and `batch_size` to easily tweak the number of epochs and the batch size.
+
+### Loss hyperparameters
+* `beta` and `lambda` control the tradeoff between audio and image quality. If using both STFT magnitude and phase, `theta` weights the importance of each of the two containers.
+
+### Audio transform
+* `transform` is used to choose between STDCT or STFT. Note that STDCT is mostly obsolete and some of the most recent features do not support it.
+* `stft_small` allows using the default 'small' STFT container or a larger one, twice the size in each dimension.
+* `ft_container` selects which STFT container to use: magnitude, phase or both.
+
+### Magnitude+phase
+* `mp_encoder` and `mp_decoder` allow choosing between multiple architectures that use the STFT magnitude and phase at the same time.
+* `mp_join` specifies the joining operation to use when revealing separately the magnitude and the phase.
+
+### Other flags
+* `permutation` specifies whether or not to permute the signals after preprocessing and before revealing.
+* `embed` is used to choose between multiple embedding methods. Non-default options have only been tested using the STFT magnitude as a container.
