@@ -210,7 +210,16 @@ class RevealNet(nn.Module):
         self.embed = embed
 
         # If mp_decoder == unet or concatenating blocks, have RevealNet accept 2 channels as input instead of 1
-        if self.mp_decoder == 'unet' or self.embed == 'blocks3':
+        if self.embed == 'blocks3' and self._stft_small:
+            self.im_encoder_layers = nn.ModuleList([
+                Down(8, 64),
+                Down(64, 64 * 2)
+            ])
+            self.im_decoder_layers = nn.ModuleList([
+                Up(64 * 2, 64),
+                Up(64, 1, opp_channels=8)
+            ])
+        elif self.mp_decoder == 'unet' or self.embed == 'blocks3':
             self.im_encoder_layers = nn.ModuleList([
                 Down(2, 64),
                 Down(64, 64 * 2)
@@ -249,7 +258,12 @@ class RevealNet(nn.Module):
             ])
 
         if self.embed == 'blocks2':
-            self.decblocks = nn.Parameter(torch.rand(2))
+            if self._stft_small:
+                self.decblocks = nn.Parameter(torch.rand(2))
+            else:
+                self.decblocks = nn.Parameter(torch.rand(8))
+        elif self.embed == 'blocks':
+            self.decblocks = 1/2 * torch.ones(2) if self._stft_small else 1/8 * torch.ones(8)
 
 
     def forward(self, ct, ct_phase=None):
@@ -313,16 +327,16 @@ class RevealNet(nn.Module):
             # Pixel Unshuffle and delete 4th component
             revealed = torch.narrow(self.pixel_unshuffle(im_dec[-1]), 1, 0, 3)
 
-        if self.embed == 'blocks':
+        if self.embed == 'blocks' or self.embed == 'blocks2':
             # Undo concatenation and recover a single image
-            (rev1, rev2) = torch.split(revealed, 256, 2)
-            # Average them
-            revealed = torch.mean(torch.cat((rev1, rev2), 0), 0).unsqueeze(0)
-        elif self.embed == 'blocks2':
-            # Undo concatenation and recover a single image
-            (rev1, rev2) = torch.split(revealed, 256, 2)
+            if self._stft_small:
+                replicas = torch.split(revealed, 256, 2)
+            else:
+                replicas = torch.split(revealed, 256, 3)
+                replicas = tuple([torch.split(replicas[i], 256, 2) for i in range(2)])
+                replicas = replicas[0] + replicas[1]
             # Scale and add
-            revealed = rev1*self.decblocks[0] + rev2*self.decblocks[1]
+            revealed = torch.sum(torch.stack([replicas[i]*self.decblocks[i] for i in range(len(self.decblocks))]), dim=0)
 
         return revealed
 
@@ -361,7 +375,10 @@ class StegoUNet(nn.Module):
                     self.mag_phase_join = nn.Conv3d(2,1,1)
 
         if self.embed == 'blocks2' or self.embed == 'blocks3':
-            self.encblocks = nn.Parameter(torch.rand(2))
+            if self.stft_small:
+                self.encblocks = nn.Parameter(torch.rand(2))
+            else:
+                self.encblocks = nn.Parameter(torch.rand(8))
 
     def forward(self, secret, cover, cover_phase=None):
         # cover_phase is not None if and only if using mag+phase
@@ -392,11 +409,21 @@ class StegoUNet(nn.Module):
                 raise Exception('\'blocks\' embedding is only implemented for STFT')
             # Replicate the hidden image as many times as required (only two for STFT)
             if self.embed == 'blocks':
-                # Simply duplicate and concat vertically
-                hidden_signal = torch.cat((hidden_signal, hidden_signal), 2)
+                if self.stft_small:
+                    # Simply duplicate and concat vertically
+                    hidden_signal = torch.cat((hidden_signal, hidden_signal), 2)
+                else:
+                    # Concat 8 copies of the image
+                    hidden_signal = torch.cat((hidden_signal, hidden_signal), 3)
+                    hidden_signal = torch.cat(tuple([hidden_signal for i in range(4)]), 2)
             else:
                 # Else also scale with a learnable weight
-                hidden_signal = torch.cat((hidden_signal*self.encblocks[0], hidden_signal*self.encblocks[1]), 2)
+                if self.stft_small:
+                    hidden_signal = torch.cat((hidden_signal*self.encblocks[0], hidden_signal*self.encblocks[1]), 2)
+                else:
+                    hidden_signal1 = torch.cat(tuple([hidden_signal*self.encblocks[i] for i in range(4)]), 2)
+                    hidden_signal2 = torch.cat(tuple([hidden_signal*self.encblocks[i+4] for i in range(4)]), 2)
+                    hidden_signal = torch.cat((hidden_signal1, hidden_signal2), 3)
         elif self.embed == 'multichannel':
             # Split the 8 channels and replicate. 1x8x256x256 -> 1x1x1024x512
             if self.stft_small:
