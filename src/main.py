@@ -8,10 +8,25 @@ main.py
 
 
 import argparse
-
+import numpy as np
+import torch
+import os
+import random
 from loader import loader
 from umodel import StegoUNet
 from train import train, validate
+
+# torch.backends.cudnn.benchmark=True
+def set_reproductibility(seed=2023):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    torch.backends.cudnn.deterministic = True
+
 
 ### PARSING ###
 
@@ -145,12 +160,16 @@ parser.add_argument('--embed',
 
 
 if __name__ == '__main__':
+    
+    set_reproductibility()
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {DEVICE}')
 
     args = parser.parse_args()
     print(args)
 
     train_loader = loader(
-        set='train',
+        set='test',#'train',
         transform=args.transform,
         stft_small=args.stft_small,
         batch_size=args.batch_size,
@@ -175,7 +194,7 @@ if __name__ == '__main__':
 
     if args.from_checkpoint:
         # Load checkpoint
-        checkpoint = torch.load(os.path.join(os.environ.get('OUT_PATH'),f'models/checkpoint_run_{args.experiment}.pt'), map_location='cpu')
+        checkpoint = torch.load(os.path.join(os.environ.get('OUT_PATH'),f'{args.experiment}-{args.summary}/model.pt'), map_location='cpu')
         model = nn.DataParallel(model)
         model.load_state_dict(checkpoint['state_dict'])
         print('Checkpoint loaded')

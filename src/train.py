@@ -18,16 +18,14 @@ from pystct import sdct_torch, isdct_torch
 from losses import ssim, SNR, PSNR, StegoLoss
 from visualization import viz2paper
 
-
-def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('OUT_PATH'),'models/checkpoint.pt')):
-     """Save checkpoint if a new best is achieved"""
-     if is_best:
-         print ("=> Saving a new best model")
-         print(f'SAVING TO: {filename}')
-         torch.save(state, filename)  # save checkpoint
-     else:
-         print ("=> Loss did not improve")
-
+def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('OUT_PATH'),'checkpoint.pt')):
+    """Save checkpoint if a new best is achieved"""
+    if is_best:
+        print ("=> Saving a new best model")
+        print(f'SAVING TO: {filename}')
+        torch.save(state, filename)  # save checkpoint
+    else:
+        print ("=> Loss did not improve")
 
 def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, val_size=50, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', stft_small=True, ft_container='mag', thet=0):
 
@@ -229,7 +227,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                     'vd_psnr': vd_psnr,
                     'vd_ssim': vd_ssim,
                     'vd_l1': vd_l1,
-                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'), f'models/checkpoint_run_{experiment}.pt'))
+                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}/model.pt'))
     
                 # Print headers again to resume training
                 print()
