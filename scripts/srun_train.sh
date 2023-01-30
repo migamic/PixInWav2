@@ -1,7 +1,8 @@
 #!/bin/bash
+source ini.sh
 
-beta=0.75
-lam=1
+beta=0.75 #0.05
+lam=1     #dtw 
 lr=0.001
 val_itvl=500
 val_size=50
@@ -9,24 +10,59 @@ num_epochs=2
 batch_size=1
 experiment=037
 summary="2_BigSTFT_Multichannel_Test"
-output="Outputs/$experiment-$summary.txt"
 from_checkpoint="False"
 permutation="False"
-transform="fourier"
-stft_small="False"
+transform="fourier" #cosine
+stft_small="False"  #True
 ft_container="mag"
 thet=1
 mp_encoder="double"
 mp_decoder="double"
 mp_join="2D"
-embed="multichannel"
+embed="multichannel" #stretch
 
+if [ -d "$HOME/later2/PixInWav2/outputs/$experiment-$summary" ]; then
+    while true; do
+        read -p "Folder $experiment-$summary already exists. Do you wish to overwrite?" yn
+        case $yn in
+            [Yy]* ) rm -rf "$HOME/later2/PixInWav2/outputs/$experiment-$summary"; break;;
+            [Nn]* ) echo "Rename your experiment. Exiting... "; exit;;
+            * ) echo "Please answer yes or no.";;
+        esac
+    done
+fi
+mkdir $HOME/later2/PixInWav2/outputs/$experiment-$summary
 
-# Develop
-srun -u -w gpic07 --gres=gpu:2,gpumem:12G -p gpi.develop -o $output --time 1:59:59 --mem 50G python3 ~/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+cat > "$HOME/later2/PixInWav2/outputs/$experiment-$summary/parameters.txt" <<EOF
+===Hyperparameters===:
+lr: $lr
+batch_size: $batch_size
 
-# Normal
-# srun -u -w gpic08 --gres=gpu:2,gpumem:12G -p gpi.compute -o $output --time 23:59:59 --mem 50G python3 ~/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+===Loss func hyperparameters===:
+beta: $beta
+theta: $thet
+DTW lambda: $lam (disregard if not using DTW)
 
-# DataParallelFix
-#srun -u --gres=gpu:2,gpumem:12G -p gpi.compute -o $output --time 23:59:59 --mem 50G python3 ~/PixInWav2/src/DataParallelFix.py --beta $beta --lr $lr --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --add_noise $add_noise --noise_kind $noise_kind --noise_amplitude $noise_amplitude --add_dtw_term $add_dtw_term --rgb $rgb --transform $transform --on_phase $on_phase --architecture $architecture
+===Architecture hyperparameters===:
+Using permutation? $permutation
+Transform: $transform
+Using small bottleneck? $stft_small
+What ft container? $ft_container
+Embedding style: $embed
+mp_encoder: $mp_encoder
+mp_decoder: $mp_decoder
+mp_join: $mp_join
+
+===Training parameters===:
+Epochs: $num_epochs
+
+===Validation parameters===:
+val_itvl: $val_itvl its
+val_size: $val_size 
+
+===Command to run===:
+CUDA_VISIBLE_DEVICES=X,Y python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+EOF
+
+CUDA_VISIBLE_DEVICES=6,7 python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+
