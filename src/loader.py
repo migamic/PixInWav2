@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 MY_FOLDER = os.environ.get('USER_PATH')
 DATA_FOLDER = os.environ.get('IMAGE_PATH')
-AUDIO_FOLDER = f'{MY_FOLDER}/data/FSDnoisy18k.audio_'
+AUDIO_FOLDER = f"{os.environ.get('AUDIO_PATH')}/FSDnoisy18k.audio_"
 MY_DATA_FOLDER = f'{MY_FOLDER}/data'
 
 class ImageProcessor():
@@ -184,12 +184,13 @@ class StegoDataset(torch.utils.data.Dataset):
         self._audios = []
 
         #IMAGE PATH RETRIEVING
-        test_i = 0 
+        test_i, test_j = 0, 0
         #keys are n90923u23
         if (folder == 'train'):
             for key in mappings.keys():
-                for img in glob.glob(f'{self._image_data_path}/{key}/*.{self.image_extension}'):
+                for j, img in enumerate(glob.glob(f'{self._image_data_path}/{key}/*.{self.image_extension}')):
     
+                    if j >= 10: break
                     self._indices.append((key, re.search(r'(?<=_)\d+', img).group()))
                     self._index += 1
 
@@ -201,14 +202,17 @@ class StegoDataset(torch.utils.data.Dataset):
                 for img in glob.glob(f'{self._image_data_path}/{key}/*.{self.image_extension}'):
     
                     if test_i > self._TOTAL:
+                        if test_j >= 10: 
+                            test_j = 0
+                            break
                         self._indices.append((key, re.search(r'(?<=_)\d+', img).group()))
                         self._index += 1
+                        test_j += 1
     
                     test_i += 1
 
                     if self._index == self._MAX_LIMIT: break
                 if self._index == self._MAX_LIMIT: break
-
 
         #AUDIO PATH RETRIEVING (here the paths for test and train are different)
         self._index_aud = 0
