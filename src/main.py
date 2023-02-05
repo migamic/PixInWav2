@@ -169,7 +169,7 @@ if __name__ == '__main__':
     print(args)
 
     train_loader = loader(
-        set='test',#'train',
+        set='train',
         transform=args.transform,
         stft_small=args.stft_small,
         batch_size=args.batch_size,

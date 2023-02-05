@@ -186,10 +186,10 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                 'tr_i_cover_loss': avg_train_loss_cover,
                 'tr_i_secret_loss': avg_train_loss_secret,
                 'tr_i_spectrum_loss': avg_train_loss_spectrum,
-                'SNR': avg_snr,
-                'PSNR': avg_psnr,
-                'SSIM': avg_ssim,
-                'L1': avg_l1_loss,
+                'tr_SNR': avg_snr,
+                'tr_PSNR': avg_psnr,
+                'tr_SSIM': avg_ssim,
+                'tr_L1': avg_l1_loss,
             })
 
             # Every 'val_itvl' iterations, do a validation step
@@ -241,9 +241,14 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
         
         # Log train average loss to wandb
         wandb.log({
-            'tr_loss': avg_train_loss,
-            'tr_cover_loss': avg_train_loss_cover,
-            'tr_secret_loss': avg_train_loss_secret,
+            'avg_tr_loss': avg_train_loss,
+            'avg_tr_cover_loss': avg_train_loss_cover,
+            'avg_tr_secret_loss': avg_train_loss_secret,
+            'avg_tr_spectrum_loss': avg_train_loss_spectrum,
+            'avg_tr_SNR': avg_snr,
+            'avg_tr_PSNR': avg_psnr,
+            'avg_tr_SSIM': avg_ssim,
+            'avg_tr_L1': avg_l1_loss
         })
         
         is_best = bool(avg_train_loss < best_loss)
@@ -257,7 +262,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             'beta': beta,
             'lr': lr,
             'i': i + 1,
-        }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'), f'models/checkpoint_run_{experiment}.pt'))
+        }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}/model.pt'))
 
     print(f"Training took {time.time() - ini} seconds")
     torch.save(model.state_dict(), os.path.join(os.environ.get('OUT_PATH'), f'models/final_run_{experiment}.pt'))
