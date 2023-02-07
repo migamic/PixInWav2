@@ -31,14 +31,10 @@ def set_reproductibility(seed=2023):
 ### PARSING ###
 
 def parse_keyword(keyword):
-    if isinstance(keyword, bool):
-       return keyword
-    if keyword.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif keyword.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Wrong keyword.')
+    if isinstance(keyword, bool): return keyword
+    if keyword.lower() in ('yes', 'true', 't', 'y', '1'): return True
+    elif keyword.lower() in ('no', 'false', 'f', 'n', '0'): return False
+    else: raise argparse.ArgumentTypeError('Wrong keyword.')
 
 
 parser = argparse.ArgumentParser()
@@ -173,12 +169,14 @@ if __name__ == '__main__':
         transform=args.transform,
         stft_small=args.stft_small,
         batch_size=args.batch_size,
+        shuffle=True
     )
     test_loader = loader(
         set='test',
         transform=args.transform,
         stft_small=args.stft_small,
-        batch_size=1,
+        batch_size=args.batch_size,
+        shuffle=True
     )
 
     model = StegoUNet(

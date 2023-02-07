@@ -250,7 +250,7 @@ class StegoDataset(torch.utils.data.Dataset):
             return (img, magnitude_stft, phase_stft)
         else: raise Exception(f'Transform not implemented')
 
-def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_size=1):
+def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_size=1, shuffle=False):
     """
     Prepares the custom dataloader.
     - [set] defines the set type. Can be either [train] or [test].
@@ -282,7 +282,8 @@ def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_siz
         batch_size=batch_size,
         shuffle=True,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        shuffle=shuffle
     )
 
     print('Data loaded ++')
