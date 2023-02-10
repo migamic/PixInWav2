@@ -210,7 +210,7 @@ class RevealNet(nn.Module):
         self.embed = embed
 
         # If mp_decoder == unet or concatenating blocks, have RevealNet accept 2 channels as input instead of 1
-        if self.embed == 'blocks3' and self._stft_small:
+        if self.embed == 'blocks3' and not self._stft_small:
             self.im_encoder_layers = nn.ModuleList([
                 Down(8, 64),
                 Down(64, 64 * 2)
@@ -280,15 +280,26 @@ class RevealNet(nn.Module):
             if self.mp_decoder == 'unet':
                 ct_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
         
-        if self.mp_decoder == 'unet':
+        if self.mp_decoder == 'unet': # mp_decoder=None unless using magphase
             # Concatenate mag and phase containers to input to RevealNet
             im_enc = [torch.cat((im_enc, im_enc_phase), 1)]
         elif self.embed == 'blocks3':
-            # Undo split and concatenate in another dimension
-            (rep1, rep2) = torch.split(ct, 512, 2)
-            im_enc = [torch.cat((rep1, rep2), 1)]
+            if self._stft_small:
+                # Undo split and concatenate in another dimension
+                if self._stft_small:
+                    (rep1, rep2) = torch.split(ct, 512, 2)
+                else:
+                    (rep1, rep2) = torch.split(ct, 1024, 2)
+                im_enc = [torch.cat((rep1, rep2), 1)]
+            else:
+                # Split the 8 replicas and concatenate. 1x1x2048x1024 -> 1x8x512x512
+                split1 = torch.split(ct, 512, 3)
+                cat1 = torch.cat(split1, 1)
+                split2 = torch.split(cat1, 512, 2)
+                im_enc = [torch.cat(split2, 1)]
         elif self.embed == 'multichannel':
-            # Split the eight replicas and concatenate. 1x1x1024x512 -> 1x8x256x256
+            # Small STFT: split the 8 replicas and concatenate. 1x1x1024x512 -> 1x8x256x256
+            # Large STFT: split the 32 replicas and concatenate. 1x1x2048x1024 -> 1x32x256x256
             split1 = torch.split(ct, 256, 3)
             cat1 = torch.cat(split1, 1)
             split2 = torch.split(cat1, 256, 2)
@@ -392,11 +403,11 @@ class StegoUNet(nn.Module):
                 # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
                 lumas = rgb_to_ycbcr(secret)
                 # Only keep the luma channel
-                lumas = lumas[:,0,:,:].unsqueeze(1).cuda()
+                lumas = lumas[:,0,:,:].unsqueeze(1).to(secret.device)
                 secret = torch.cat((secret,lumas),1)
             else:
                 # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-                zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).cuda()
+                zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).to(secret.device)
                 secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
@@ -451,7 +462,7 @@ class StegoUNet(nn.Module):
         if self.transform == 'fourier' and self.ft_container == 'magphase':
             if self.mp_encoder == 'double':
                 container_phase = cover_phase + hidden_signal_phase
-            elif self.mp_encoder == 'single':
+            else:
                 container_phase = cover_phase + hidden_signal
             orig_container_phase = container_phase
 

@@ -23,9 +23,9 @@ from torch_stft import STFT
 import matplotlib.pyplot as plt
 
 MY_FOLDER = os.environ.get('USER_PATH')
-DATA_FOLDER = os.environ.get('IMAGE_PATH')
-AUDIO_FOLDER = f"{os.environ.get('AUDIO_PATH')}/FSDnoisy18k.audio_"
-MY_DATA_FOLDER = f'{MY_FOLDER}/data'
+DATA_FOLDER = os.environ.get('DATA_PATH')
+AUDIO_FOLDER = f"{DATA_FOLDER}/FSDnoisy/FSDnoisy18k.audio_"
+IMAGE_FOLDER = f'{DATA_FOLDER}/imagenet'
 
 class ImageProcessor():
     """
@@ -167,9 +167,9 @@ class StegoDataset(torch.utils.data.Dataset):
         # self._image_data_path = pathlib.Path(image_root) / folder
         self._image_data_path = pathlib.Path(image_root) / 'train'
         self._audio_data_path = pathlib.Path(f'{audio_root}{folder}')
-        self._MAX_LIMIT = 10000 if folder == 'train' else 900
-        self._TOTAL = 10000
-        self._MAX_AUDIO_LIMIT = 17584 if folder == 'train' else 946
+        self._MAX_LIMIT = 1000 if folder == 'train' else 900
+        self._TOTAL = 1000
+        self._MAX_AUDIO_LIMIT = 1758 if folder == 'train' else 946
         self._colorspace = 'RGB' if rgb else 'L'
         self._transform = transform
         self._stft_small = stft_small
@@ -261,13 +261,13 @@ def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_siz
     """
     print('Preparing dataset...')
     mappings = {}
-    with open(f'{MY_DATA_FOLDER}/mappings.txt') as f:
+    with open(f'{IMAGE_FOLDER}/mappings.txt') as f:
         for line in f:
-            (key, i, img) = line.split()
-            mappings[key] = img
+            words = line.split()
+            mappings[words[0]] = words[1]
 
     dataset = StegoDataset(
-        image_root=DATA_FOLDER,
+        image_root=f'{IMAGE_FOLDER}/ILSVRC/Data/CLS-LOC',
         audio_root=AUDIO_FOLDER,
         folder=set,
         mappings=mappings,
@@ -280,7 +280,6 @@ def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_siz
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
         num_workers=4,
         pin_memory=True,
         shuffle=shuffle

@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch_stft import STFT
+from pydtw import SoftDTW
 from pystct import sdct_torch, isdct_torch
 from losses import ssim, SNR, PSNR, StegoLoss
 from visualization import viz2paper
@@ -27,7 +28,7 @@ def save_checkpoint(state, is_best, filename=os.path.join(os.environ.get('OUT_PA
     else:
         print ("=> Loss did not improve")
 
-def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, val_size=50, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', stft_small=True, ft_container='mag', thet=0):
+def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, val_size=50, prev_epoch = None, prev_i = None, summary=None, slide=50, experiment=0, transform='cosine', stft_small=True, ft_container='mag', thet=0, dtw=False):
 
     # Initialize wandb logs
     wandb.init(project='PixInWavRGB')
@@ -60,8 +61,11 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
     ini = time.time()
     best_loss = np.inf
 
-    # Initialize L1 loss constructor
-    l1wavLoss = nn.L1Loss()
+    # Initialize waveform loss constructor
+    if dtw:
+        softDTW = SoftDTW(gamma=1.0, normalize=True)
+    else:
+        l1wavLoss = nn.L1Loss()
 
     # Initialize STFT transform constructor
     if transform == 'fourier':
@@ -79,12 +83,12 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
         if prev_epoch != None and epoch < prev_epoch - 1: continue # Checkpoint pass
 
         # Initialize training metrics storage
-        train_loss, train_loss_cover, train_loss_secret, train_loss_spectrum, snr, psnr, ssim_secret, train_l1_loss = [], [], [], [], [], [], [], []
-        vd_loss, vd_loss_cover, vd_loss_secret, vd_snr, vd_psnr, vd_ssim, vd_l1 = [], [], [], [], [], [], []
+        train_loss, train_loss_cover, train_loss_secret, train_loss_spectrum, snr, psnr, ssim_secret, train_wav_loss = [], [], [], [], [], [], [], []
+        vd_loss, vd_loss_cover, vd_loss_secret, vd_snr, vd_psnr, vd_ssim, vd_wav = [], [], [], [], [], [], []
         
         # Print headers for the losses
         print()
-        print(' Iter.     Time  Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
+        print(' Iter.     Time  Tr. Loss  Au. MSE   Im. WF  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. WF')
         for i, data in enumerate(tr_loader):
 
             if prev_i != None and i < prev_i - 1: continue # Checkpoint pass
@@ -92,7 +96,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             # Load data from the loader
             secrets, covers = data[0].to(device), data[1].to(device)
             if transform == 'fourier': phase = data[2].to(device)
-            secrets = secrets.permute(0, 3, 1, 2).type(torch.cuda.FloatTensor)
+            secrets = torch.FloatTensor(secrets.permute(0, 3, 1, 2).float()).to(device)
             covers = covers.unsqueeze(1) if transform == 'cosine' else covers
 
             optimizer.zero_grad()
@@ -136,9 +140,13 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                     container_2x_phase = stft.transform(container_wav)[1].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag, thet)
 
-            # Compute L1 waveform loss. Add it only if specified
-            l1_loss = l1wavLoss(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
-            objective_loss = loss + lam * l1_loss
+            # Compute waveform loss. Add it only if specified
+            if dtw:
+                wav_loss = softDTW(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
+                if transform == 'fourier': wav_loss = wav_loss[0]
+            else:
+                wav_loss = l1wavLoss(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
+            objective_loss = loss + lam * wav_loss
             with torch.autograd.set_detect_anomaly(True):
                 objective_loss.backward()
             optimizer.step()
@@ -166,7 +174,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             snr.append(snr_audio)
             psnr.append(psnr_image.detach().item())
             ssim_secret.append(ssim_image.detach().item())
-            train_l1_loss.append(l1_loss.detach().item())
+            train_wav_loss.append(wav_loss.detach().item())
 
             avg_train_loss = np.mean(train_loss[-slide:])
             avg_train_loss_cover = np.mean(train_loss_cover[-slide:])
@@ -175,10 +183,10 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             avg_snr = np.mean(snr[-slide:])
             avg_ssim = np.mean(ssim_secret[-slide:])
             avg_psnr = np.mean(psnr[-slide:])
-            avg_l1_loss = np.mean(train_l1_loss[-slide:])
-            avg_l1_loss = np.mean(train_l1_loss[-slide:])
+            avg_wav_loss = np.mean(train_wav_loss[-slide:])
+            avg_wav_loss = np.mean(train_wav_loss[-slide:])
 
-            print('(#%4d)[%5d s] %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (i, np.round(time.time()-ini), loss.detach().item(), loss_cover.detach().item(), loss_secret.detach().item(), loss_spectrum.detach().item(), snr_audio, psnr_image.detach().item(), ssim_image.detach().item(), l1_loss.detach().item()))
+            print('(#%4d)[%5d s] %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (i, np.round(time.time()-ini), loss.detach().item(), loss_cover.detach().item(), loss_secret.detach().item(), loss_spectrum.detach().item(), snr_audio, psnr_image.detach().item(), ssim_image.detach().item(), wav_loss.detach().item()))
 
             # Log train average loss to wandb
             wandb.log({
@@ -189,12 +197,13 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                 'tr_SNR': avg_snr,
                 'tr_PSNR': avg_psnr,
                 'tr_SSIM': avg_ssim,
-                'tr_L1': avg_l1_loss,
+                'tr_wav': avg_wav_loss,
             })
 
             # Every 'val_itvl' iterations, do a validation step
             if (i % val_itvl == 0) and (i != 0):
-                avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1 = validate(model, vd_loader, beta, val_size=val_size, transform=transform, transform_constructor=stft if transform=='fourier' else None, ft_container=ft_container, l1_criterion=l1wavLoss, tr_i=i, epoch=epoch)
+                criterion = softDTW if dtw else l1wavLoss
+                avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_wav = validate(model, vd_loader, beta, val_size=val_size, transform=transform, transform_constructor=stft if transform=='fourier' else None, ft_container=ft_container, wav_criterion=criterion, tr_i=i, epoch=epoch)
                 
                 vd_loss.append(avg_valid_loss) 
                 vd_loss_cover.append(avg_valid_loss_cover) 
@@ -202,7 +211,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                 vd_snr.append(avg_valid_snr) 
                 vd_psnr.append(avg_valid_psnr)
                 vd_ssim.append(avg_valid_ssim) 
-                vd_l1.append(avg_valid_l1)
+                vd_wav.append(avg_valid_wav)
 
                 is_best = bool(avg_valid_loss < best_loss)
                 # Save checkpoint if is a new best
@@ -219,24 +228,24 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                     'tr_snr': snr,
                     'tr_psnr': psnr,
                     'tr_ssim': ssim_secret,
-                    'tr_l1': train_l1_loss,
+                    'tr_wav': train_wav_loss,
                     'vd_loss': vd_loss,
                     'vd_cover_loss': vd_loss_cover,
                     'vd_loss_secret': vd_loss_secret,
                     'vd_snr': vd_snr,
                     'vd_psnr': vd_psnr,
                     'vd_ssim': vd_ssim,
-                    'vd_l1': vd_l1,
-                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}/model.pt'))
+                    'vd_wav': vd_wav,
+                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}.pt'))
     
                 # Print headers again to resume training
                 print()
-                print(' Iter.     Time  Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
+                print(' Iter.     Time  Tr. Loss  Au. MSE   Im. WF  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. WF')
         
         # Print average validation results after every epoch
         print()
-        print('Epoch average:      Tr. Loss  Au. MSE   Im. L1  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. L1')
-        print('Epoch %1d/%1d:          %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (epoch+1, epochs, avg_train_loss, avg_train_loss_cover, avg_train_loss_secret, avg_train_loss_spectrum, avg_snr, avg_psnr, avg_ssim, avg_l1_loss))
+        print('Epoch average:      Tr. Loss  Au. MSE   Im. WF  Spectr.  Au. SNR Im. PSNR Im. SSIM   Au. WF')
+        print('Epoch %1d/%1d:          %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (epoch+1, epochs, avg_train_loss, avg_train_loss_cover, avg_train_loss_secret, avg_train_loss_spectrum, avg_snr, avg_psnr, avg_ssim, avg_wav_loss))
         print()
         
         # Log train average loss to wandb
@@ -248,7 +257,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             'avg_tr_SNR': avg_snr,
             'avg_tr_PSNR': avg_psnr,
             'avg_tr_SSIM': avg_ssim,
-            'avg_tr_L1': avg_l1_loss
+            'avg_tr_WF': avg_wav_loss
         })
         
         is_best = bool(avg_train_loss < best_loss)
@@ -262,7 +271,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             'beta': beta,
             'lr': lr,
             'i': i + 1,
-        }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}/model.pt'))
+        }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}.pt'))
 
     print(f"Training took {time.time() - ini} seconds")
     torch.save(model.state_dict(), os.path.join(os.environ.get('OUT_PATH'), f'models/final_run_{experiment}.pt'))
@@ -278,7 +287,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
 
 
 
-def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_constructor=None, ft_container='mag', l1_criterion=None, epoch=None, tr_i=None, thet=0):
+def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_constructor=None, ft_container='mag', wav_criterion=None, epoch=None, tr_i=None, thet=0):
 
     # Set device
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -293,7 +302,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
     model.eval()
     loss = 0
 
-    valid_loss, valid_loss_cover, valid_loss_secret, valid_loss_spectrum, valid_snr, valid_psnr, valid_ssim, valid_l1 = [], [], [], [], [], [], [], []
+    valid_loss, valid_loss_cover, valid_loss_secret, valid_loss_spectrum, valid_snr, valid_psnr, valid_ssim, valid_wav = [], [], [], [], [], [], [], []
     vd_datalen = len(vd_loader)
 
     # Start validating ...
@@ -303,7 +312,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
 
             # Load data from the loader
             secrets, covers = data[0].to(device), data[1].to(device)
-            secrets = secrets.permute(0, 3, 1, 2).type(torch.cuda.FloatTensor)
+            secrets = torch.FloatTensor(secrets.permute(0, 3, 1, 2).float()).to(device)
             if transform == 'fourier': phase = data[2].to(device)
             covers = covers.unsqueeze(1) if transform == 'cosine' else covers
 
@@ -347,19 +356,19 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
                 if ft_container == 'mag':
                     original_wav = transform_constructor.inverse(covers.squeeze(1), phase.squeeze(1))
                     container_wav = transform_constructor.inverse(containers.squeeze(1), phase.squeeze(1))
-                    container_2x = transform_constructor.transform(container_wav)[0].unsqueeze(0)
+                    container_2x = transform_constructor.transform(container_wav)[0].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, covers, containers, container_2x, revealed, beta)
                 elif ft_container == 'phase':
                     original_wav = transform_constructor.inverse(covers.squeeze(1), phase.squeeze(1))
                     container_wav = transform_constructor.inverse(covers.squeeze(1), containers.squeeze(1))
-                    container_2x = transform_constructor.transform(container_wav)[1].unsqueeze(0)
+                    container_2x = transform_constructor.transform(container_wav)[1].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers, container_2x, revealed, beta)
                 elif ft_container == 'magphase':
                     # Using magnitude+phase. Compute both MSEs
                     original_wav = transform_constructor.inverse(covers.squeeze(1), phase.squeeze(1))
                     container_wav = transform_constructor.inverse(containers.squeeze(1), containers_phase.squeeze(1)) # Single waveform with mag and phase modified
-                    container_2x_mag = transform_constructor.transform(container_wav)[0].unsqueeze(0)
-                    container_2x_phase = transform_constructor.transform(container_wav)[1].unsqueeze(0)
+                    container_2x_mag = transform_constructor.transform(container_wav)[0].unsqueeze(1)
+                    container_2x_phase = transform_constructor.transform(container_wav)[1].unsqueeze(1)
                     loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, phase, containers_phase, container_2x_phase, revealed, beta, covers, containers, container_2x_mag, thet)
 
             # Compute audio and image metrics
@@ -377,12 +386,12 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
             vd_psnr_image = PSNR(secrets, revealed)
             ssim_image = ssim(secrets, revealed)
 
-            if l1_criterion is not None:
+            if wav_criterion is not None:
                 if transform == 'cosine':
                     original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
                 elif transform == 'fourier':
                     original_wav = transform_constructor.inverse(covers.squeeze(1), phase.squeeze(1))
-                l1_loss = l1_criterion(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
+                wav_loss = wav_criterion(original_wav.cpu().unsqueeze(0), container_wav.cpu().unsqueeze(0))
 
             valid_loss.append(loss.detach().item())
             valid_loss_cover.append(loss_cover.detach().item())
@@ -391,7 +400,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
             valid_snr.append(vd_snr_audio)
             valid_psnr.append(vd_psnr_image.detach().item())
             valid_ssim.append(ssim_image.detach().item())
-            valid_l1.append(l1_loss.detach().item())
+            valid_wav.append(wav_loss.detach().item())
 
             # Stop validation after val_size steps
             if i >= val_size: break
@@ -403,7 +412,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
         avg_valid_snr = np.mean(valid_snr)
         avg_valid_psnr = np.mean(valid_psnr)
         avg_valid_ssim = np.mean(valid_ssim)
-        avg_valid_l1 = np.mean(valid_l1)
+        avg_valid_wav = np.mean(valid_wav)
 
         wandb.log({
             'vd_loss': avg_valid_loss,
@@ -413,7 +422,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
             'vd_SNR': avg_valid_snr,
             'vd_PSNR': avg_valid_psnr,
             'vd_SSIM': avg_valid_ssim,
-            'vd_L1': avg_valid_l1
+            'vd_WF': avg_valid_wav
         })
 
     del valid_loss
@@ -423,16 +432,16 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
     del valid_snr
     del valid_psnr
     del valid_ssim
-    del valid_l1
+    del valid_wav
     gc.collect()
 
     # Print average validation results
     print()
-    print('Validation avg:    Val. Loss    Cover   Secret  Au. SNR Im. PSNR Im. SSIM   Au. L1')
-    print('                    %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1))
+    print('Validation avg:    Val. Loss    Cover   Secret  Au. SNR Im. PSNR Im. SSIM   Au. WF')
+    print('                    %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f' % (avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_wav))
     print()
 
     # Reset model to training mode
     model.train()
 
-    return avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_l1
+    return avg_valid_loss, avg_valid_loss_cover, avg_valid_loss_secret, avg_valid_snr, avg_valid_psnr, avg_valid_ssim, avg_valid_wav
