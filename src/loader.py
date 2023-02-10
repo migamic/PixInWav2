@@ -167,9 +167,9 @@ class StegoDataset(torch.utils.data.Dataset):
         # self._image_data_path = pathlib.Path(image_root) / folder
         self._image_data_path = pathlib.Path(image_root) / 'train'
         self._audio_data_path = pathlib.Path(f'{audio_root}{folder}')
-        self._MAX_LIMIT = 1000 if folder == 'train' else 900
-        self._TOTAL = 1000
-        self._MAX_AUDIO_LIMIT = 1758 if folder == 'train' else 946
+        self._MAX_LIMIT = 10000 if folder == 'train' else 900
+        self._TOTAL = 10000
+        self._MAX_AUDIO_LIMIT = 17584 if folder == 'train' else 946
         self._colorspace = 'RGB' if rgb else 'L'
         self._transform = transform
         self._stft_small = stft_small
