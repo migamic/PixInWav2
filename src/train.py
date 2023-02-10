@@ -117,9 +117,9 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
 
             # Compute the loss
             if transform == 'cosine':
-                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
-                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
-                container_2x = sdct_torch(container_wav, frame_length=4096, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
+                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
+                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
+                container_2x = sdct_torch(container_wav, frame_length=1024, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
                 loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, covers, containers, container_2x, revealed, beta)
             elif transform == 'fourier': 
                 if ft_container == 'mag':
@@ -348,9 +348,9 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
 
             # Compute the loss
             if transform == 'cosine':
-                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
-                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=4096, frame_step=130, window=torch.hamming_window)
-                container_2x = sdct_torch(container_wav, frame_length=4096, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
+                original_wav = isdct_torch(covers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
+                container_wav = isdct_torch(containers.squeeze(0).squeeze(0), frame_length=1024, frame_step=130, window=torch.hamming_window)
+                container_2x = sdct_torch(container_wav, frame_length=1024, frame_step=130, window=torch.hamming_window).unsqueeze(0).unsqueeze(0)
                 loss, loss_cover, loss_secret, loss_spectrum = StegoLoss(secrets, covers, containers, container_2x, revealed, beta)
             elif transform == 'fourier': 
                 if ft_container == 'mag':

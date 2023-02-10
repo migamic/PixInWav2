@@ -74,8 +74,8 @@ class AudioProcessor():
         # Corresponds to 1.5 seconds approximately
         self._limit = 67522 # 2 ** 16 + 2 ** 11 - 2 ** 6 + 2
         if transform == 'cosine':
-            self._frame_length = 2 ** 12
-            self._frame_step = 2 ** 6 - 2
+            self._frame_length = 2 ** 10
+            self._frame_step = 2 ** 7 + 2
         else:
             if stft_small:
                 self._frame_length = 2 ** 11 - 1

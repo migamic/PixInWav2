@@ -176,7 +176,7 @@ class PrepHidingNet(nn.Module):
         if self.embed == 'stretch' or self.embed == 'luma':
         # Stretch the image to make it the same shape as the container (different for STDCT and STFT)
             if self._transform == 'cosine':
-                im = nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)
+                im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
             elif self._transform == 'fourier':
                 if self._stft_small:
                     im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
