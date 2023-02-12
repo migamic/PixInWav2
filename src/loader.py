@@ -280,7 +280,6 @@ def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_siz
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
         num_workers=4,
         pin_memory=True,
         shuffle=shuffle
