@@ -96,7 +96,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             # Load data from the loader
             secrets, covers = data[0].to(device), data[1].to(device)
             if transform == 'fourier': phase = data[2].to(device)
-            secrets = torch.FloatTensor(secrets.permute(0, 3, 1, 2).float()).to(device)
+            secrets = secrets.permute(0, 3, 1, 2).type(torch.cuda.FloatTensor)
             covers = covers.unsqueeze(1) if transform == 'cosine' else covers
 
             optimizer.zero_grad()
@@ -312,7 +312,7 @@ def validate(model, vd_loader, beta, val_size=50, transform='cosine', transform_
 
             # Load data from the loader
             secrets, covers = data[0].to(device), data[1].to(device)
-            secrets = torch.FloatTensor(secrets.permute(0, 3, 1, 2).float()).to(device)
+            secrets = secrets.permute(0, 3, 1, 2).type(torch.cuda.FloatTensor)
             if transform == 'fourier': phase = data[2].to(device)
             covers = covers.unsqueeze(1) if transform == 'cosine' else covers
 

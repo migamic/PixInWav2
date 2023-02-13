@@ -23,9 +23,9 @@ from torch_stft import STFT
 import matplotlib.pyplot as plt
 
 MY_FOLDER = os.environ.get('USER_PATH')
-DATA_FOLDER = os.environ.get('DATA_PATH')
-AUDIO_FOLDER = f"{DATA_FOLDER}/FSDnoisy/FSDnoisy18k.audio_"
-IMAGE_FOLDER = f'{DATA_FOLDER}/imagenet'
+DATA_FOLDER = os.environ.get('IMAGE_PATH')
+AUDIO_FOLDER = f"{os.environ.get('AUDIO_PATH')}/FSDnoisy18k.audio_"
+MY_DATA_FOLDER = f'{MY_FOLDER}/data'
 
 class ImageProcessor():
     """
@@ -261,13 +261,13 @@ def loader(set='train', rgb=True, transform='cosine', stft_small=True, batch_siz
     """
     print('Preparing dataset...')
     mappings = {}
-    with open(f'{IMAGE_FOLDER}/mappings.txt') as f:
+    with open(f'{MY_DATA_FOLDER}/mappings.txt') as f:
         for line in f:
             words = line.split()
             mappings[words[0]] = words[1]
 
     dataset = StegoDataset(
-        image_root=f'{IMAGE_FOLDER}/ILSVRC/Data/CLS-LOC',
+        image_root=DATA_FOLDER,
         audio_root=AUDIO_FOLDER,
         folder=set,
         mappings=mappings,

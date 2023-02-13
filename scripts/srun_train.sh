@@ -1,4 +1,5 @@
 #!/bin/bash
+source ini.sh
 
 beta=0.75 #0.05
 lam=1     #dtw 
@@ -21,19 +22,19 @@ mp_decoder="double"
 mp_join="2D"
 embed="stretch" #stretch
 
-if [ -d "$HOME/PixInWav2/outputs/$experiment-$summary" ]; then
+if [ -d "$HOME/later2/PixInWav2/outputs/$experiment-$summary" ]; then
     while true; do
         read -p "Folder $experiment-$summary already exists. Do you wish to overwrite?" yn
         case $yn in
-            [Yy]* ) rm -rf "$HOME/PixInWav2/outputs/$experiment-$summary"; break;;
+            [Yy]* ) rm -rf "$HOME/later2/PixInWav2/outputs/$experiment-$summary"; break;;
             [Nn]* ) echo "Rename your experiment. Exiting... "; exit;;
             * ) echo "Please answer yes or no.";;
         esac
     done
 fi
-mkdir -p "$HOME/PixInWav2/outputs/$experiment-$summary"
+mkdir -p "$HOME/later2/PixInWav2/outputs/$experiment-$summary"
 
-cat > "$HOME/PixInWav2/outputs/$experiment-$summary/parameters.txt" <<EOF
+cat > "$HOME/later2/PixInWav2/outputs/$experiment-$summary/parameters.txt" <<EOF
 ===Hyperparameters===:
 lr: $lr
 batch_size: $batch_size
@@ -61,8 +62,8 @@ val_itvl: $val_itvl its
 val_size: $val_size 
 
 ===Command to run===:
-CUDA_VISIBLE_DEVICES=X,Y python3 $HOME/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+CUDA_VISIBLE_DEVICES=X,Y python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
 EOF
 
-CUDA_VISIBLE_DEVICES=6,7 python3 $HOME/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+CUDA_VISIBLE_DEVICES=5,6 python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
 
