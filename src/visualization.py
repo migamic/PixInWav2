@@ -24,13 +24,13 @@ def viz2paper(s, r, cv, ct, cv_phase, ct_phase, transform, ft_container, log=Tru
     else:
         raise Exception('Transform not implemented')
 
-    s = s.permute(0,2,3,1).detach().numpy().squeeze(0)
-    r = r.permute(0,2,3,1).detach().numpy().squeeze(0)
-    cv = cv.detach().numpy().squeeze(0).squeeze(0)
-    ct = ct.detach().numpy().squeeze(0).squeeze(0)
+    s = s[0,:,:,:].permute(1,2,0).detach().numpy()
+    r = r[0,:,:,:].permute(1,2,0).detach().numpy()
+    cv = cv[0,:,:,:].detach().numpy().squeeze(0)
+    ct = ct[0,:,:,:].detach().numpy().squeeze(0)
     if ct_phase is not None:
-        cv_phase = cv_phase.detach().numpy().squeeze(0).squeeze(0)
-        ct_phase = ct_phase.detach().numpy().squeeze(0).squeeze(0)
+        cv_phase = cv_phase[0,:,:,:].detach().numpy().squeeze(0)
+        ct_phase = ct_phase[0,:,:,:].detach().numpy().squeeze(0)
     
     s = (s * 255.0).astype(np.uint8)
     r = np.clip(r * 255.0, 0, 255).astype(np.uint8)

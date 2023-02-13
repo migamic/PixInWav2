@@ -15,6 +15,7 @@ import random
 from loader import loader
 from umodel import StegoUNet
 from train import train, validate
+import torch.nn as nn
 
 # torch.backends.cudnn.benchmark=True
 def set_reproductibility(seed=2023):
@@ -49,6 +50,12 @@ parser.add_argument('--lam',
                         default=0,
                         metavar='DOUBLE',
                         help='Lambda hyperparameter'
+                    )
+parser.add_argument('--dtw',
+                        type=parse_keyword,
+                        default=False,
+                        metavar='BOOL',
+                        help='Use DTW (instead of L1) loss'
                     )
 parser.add_argument('--lr',
                         type=float,
@@ -192,8 +199,9 @@ if __name__ == '__main__':
 
     if args.from_checkpoint:
         # Load checkpoint
-        checkpoint = torch.load(os.path.join(os.environ.get('OUT_PATH'),f'{args.experiment}-{args.summary}/model.pt'), map_location='cpu')
-        model = nn.DataParallel(model)
+        checkpoint = torch.load(os.path.join(os.environ.get('OUT_PATH'),f'{args.experiment}-{args.summary}.pt'), map_location='cpu')
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
         model.load_state_dict(checkpoint['state_dict'])
         print('Checkpoint loaded')
 
@@ -217,5 +225,6 @@ if __name__ == '__main__':
         transform=args.transform,
         stft_small=args.stft_small,
         ft_container=args.ft_container,
-        thet=args.thet
+        thet=args.thet,
+        dtw=args.dtw
     )
