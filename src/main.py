@@ -159,6 +159,12 @@ parser.add_argument('--embed',
                         metavar='STR',
                         help='Method of adding the image into the audio: [stretch], [blocks], [blocks2], [blocks3], [multichannel], [luma]'
                     )
+parser.add_argument('--luma',
+                        type=parse_keyword,
+                        default=False,
+                        metavar='BOOL',
+                        help='Add luma component as the fourth pixelshuffle value'
+                    )
 
 
 
@@ -194,7 +200,8 @@ if __name__ == '__main__':
         mp_decoder=args.mp_decoder,
         mp_join=args.mp_join,
         permutation=args.permutation,
-        embed=args.embed
+        embed=args.embed,
+        luma=args.luma
     )
 
     if args.from_checkpoint:

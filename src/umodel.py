@@ -173,7 +173,7 @@ class PrepHidingNet(nn.Module):
         if self.embed != 'multichannel':
             im = self.pixel_shuffle(im)
 
-        if self.embed == 'stretch' or self.embed == 'luma':
+        if self.embed == 'stretch':
         # Stretch the image to make it the same shape as the container (different for STDCT and STFT)
             if self._transform == 'cosine':
                 im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
@@ -201,13 +201,14 @@ class PrepHidingNet(nn.Module):
 
 
 class RevealNet(nn.Module):
-    def __init__(self, mp_decoder=None, stft_small=True, embed='stretch'):
+    def __init__(self, mp_decoder=None, stft_small=True, embed='stretch', luma=False):
         super(RevealNet, self).__init__()
 
         self.mp_decoder = mp_decoder
         self.pixel_unshuffle = PixelUnshuffle(2)
         self._stft_small = stft_small
         self.embed = embed
+        self.luma = luma
 
         # If mp_decoder == unet or concatenating blocks, have RevealNet accept 2 channels as input instead of 1
         if self.embed == 'blocks3' and not self._stft_small:
@@ -275,7 +276,7 @@ class RevealNet(nn.Module):
 
 
         # Stretch the container to make it the same size as the image
-        if self.embed == 'stretch' or self.embed == 'luma':
+        if self.embed == 'stretch':
             ct = F.interpolate(ct, size=(256 * 2, 256 * 2))
             if self.mp_decoder == 'unet':
                 ct_phase = F.interpolate(ct_phase, size=(256 * 2, 256 * 2))
@@ -324,7 +325,7 @@ class RevealNet(nn.Module):
         if self.embed == 'multichannel':
             # The revealed image is the output of the U-Net
             revealed = im_dec[-1]
-        elif self.embed == 'luma':
+        elif self.luma:
             # Convert RGB to YUV, average lumas and back to RGB
             unshuffled = self.pixel_unshuffle(im_dec[-1])
             rgbs = torch.narrow(unshuffled, 1, 0, 3)
@@ -355,7 +356,7 @@ class RevealNet(nn.Module):
 
 
 class StegoUNet(nn.Module):
-    def __init__(self, transform='cosine', stft_small=True, ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch'):
+    def __init__(self, transform='cosine', stft_small=True, ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch', luma='luma'):
 
         super().__init__()
 
@@ -367,13 +368,19 @@ class StegoUNet(nn.Module):
         self.mp_join = mp_join
         self.permutation = permutation
         self.embed = embed
+        self.luma = luma
+
+        if self.ft_container == 'magphase' and self.embed != 'stretch':
+            raise Exception('Mag+phase does not work with embeddings other than stretch')
+        if self.luma and self.embed == 'multichannel':
+            raise Exception('Luma is not compatible with multichannel')
         
         if transform != 'fourier' or ft_container != 'magphase':
             self.mp_decoder = None # For compatiblity with RevealNet
 
         # Sub-networks
         self.PHN = PrepHidingNet(self.transform, self.stft_small, self.embed)
-        self.RN = RevealNet(self.mp_decoder, self.stft_small, self.embed)
+        self.RN = RevealNet(self.mp_decoder, self.stft_small, self.embed, self.luma)
         if transform == 'fourier' and ft_container == 'magphase':
             # The previous one is for the magnitude. Create a second one for the phase
             if mp_encoder == 'double':
@@ -397,18 +404,16 @@ class StegoUNet(nn.Module):
         assert not ((self.transform == 'fourier' and self.ft_container == 'magphase') and cover_phase is None)
         assert not ((self.transform == 'fourier' and self.ft_container != 'magphase') and cover_phase is not None)
 
-        if self.embed != 'multichannel':
-            if self.embed == 'luma':
-                pass
-                # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
-                lumas = rgb_to_ycbcr(secret)
-                # Only keep the luma channel
-                lumas = lumas[:,0,:,:].unsqueeze(1).to(secret.device)
-                secret = torch.cat((secret,lumas),1)
-            else:
-                # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-                zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).to(secret.device)
-                secret = torch.cat((secret,zero),1)
+        if self.luma:
+            # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
+            lumas = rgb_to_ycbcr(secret)
+            # Only keep the luma channel
+            lumas = lumas[:,0,:,:].unsqueeze(1).to(secret.device)
+            secret = torch.cat((secret,lumas),1)
+        else:
+            # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
+            zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).to(secret.device)
+            secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
         hidden_signal = self.PHN(secret)
