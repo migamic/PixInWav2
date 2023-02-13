@@ -278,11 +278,11 @@ class RevealNet(nn.Module):
         if self.embed == 'stretch' or self.embed == 'luma':
             ct = F.interpolate(ct, size=(256 * 2, 256 * 2))
             if self.mp_decoder == 'unet':
-                ct_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
+                ct_phase = F.interpolate(ct_phase, size=(256 * 2, 256 * 2))
         
         if self.mp_decoder == 'unet': # mp_decoder=None unless using magphase
             # Concatenate mag and phase containers to input to RevealNet
-            im_enc = [torch.cat((im_enc, im_enc_phase), 1)]
+            im_enc = [torch.cat((ct, ct_phase), 1)]
         elif self.embed == 'blocks3':
             if self._stft_small:
                 # Undo split and concatenate in another dimension
@@ -377,9 +377,9 @@ class StegoUNet(nn.Module):
         if transform == 'fourier' and ft_container == 'magphase':
             # The previous one is for the magnitude. Create a second one for the phase
             if mp_encoder == 'double':
-                self.PHN_phase = PrepHidingNet(self.transform)
+                self.PHN_phase = PrepHidingNet(self.transform, self.stft_small, self.embed)
             if mp_decoder == 'double':
-                self.RN_phase = RevealNet(self.mp_decoder)
+                self.RN_phase = RevealNet(self.mp_decoder, self.stft_small, self.embed)
                 if mp_join == '2D':
                     self.mag_phase_join = nn.Conv2d(6,3,1)
                 elif mp_join == '3D':
@@ -490,8 +490,8 @@ class StegoUNet(nn.Module):
                     join = torch.cat((revealed,revealed_phase),1)
                     revealed = self.mag_phase_join(join)
                 elif self.mp_join == '3D':
-                    revealed = revealed.unsqueeze(0)
-                    revealed_phase = revealed_phase.unsqueeze(0)
+                    revealed = revealed.unsqueeze(1)
+                    revealed_phase = revealed_phase.unsqueeze(1)
                     join = torch.cat((revealed,revealed_phase),1)
                     revealed = self.mag_phase_join(join).squeeze(1)
             return (orig_container, orig_container_phase), revealed
