@@ -236,7 +236,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                     'vd_psnr': vd_psnr,
                     'vd_ssim': vd_ssim,
                     'vd_wav': vd_wav,
-                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}.pt'))
+                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{epoch + 1}--{experiment}-{summary}.pt'))
     
                 # Print headers again to resume training
                 print()
