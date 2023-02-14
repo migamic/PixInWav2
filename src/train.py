@@ -236,7 +236,7 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
                     'vd_psnr': vd_psnr,
                     'vd_ssim': vd_ssim,
                     'vd_wav': vd_wav,
-                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{epoch + 1}--{experiment}-{summary}.pt'))
+                }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}/{epoch + 1}-{experiment}-{summary}.pt'))
     
                 # Print headers again to resume training
                 print()
@@ -271,10 +271,10 @@ def train(model, tr_loader, vd_loader, beta, lam, lr, epochs=5, val_itvl=500, va
             'beta': beta,
             'lr': lr,
             'i': i + 1,
-        }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}.pt'))
+        }, is_best=is_best, filename=os.path.join(os.environ.get('OUT_PATH'),f'{experiment}-{summary}/{epoch + 1}-{experiment}-{summary}.pt'))
 
     print(f"Training took {time.time() - ini} seconds")
-    torch.save(model.state_dict(), os.path.join(os.environ.get('OUT_PATH'), f'models/final_run_{experiment}.pt'))
+    torch.save(model.state_dict(), os.path.join(os.environ.get('OUT_PATH'), f'{experiment}-{summary}/final_run_{experiment}.pt'))
     return model, avg_train_loss
 
 
