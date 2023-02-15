@@ -173,10 +173,10 @@ class PrepHidingNet(nn.Module):
         if self.embed != 'multichannel':
             im = self.pixel_shuffle(im)
 
-        if self.embed == 'stretch' or self.embed == 'luma':
+        if self.embed == 'stretch':
         # Stretch the image to make it the same shape as the container (different for STDCT and STFT)
             if self._transform == 'cosine':
-                im = nn.Upsample(scale_factor=(8, 2), mode='bilinear',align_corners=True)(im)
+                im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
             elif self._transform == 'fourier':
                 if self._stft_small:
                     im = nn.Upsample(scale_factor=(2, 1), mode='bilinear',align_corners=True)(im)
@@ -201,16 +201,17 @@ class PrepHidingNet(nn.Module):
 
 
 class RevealNet(nn.Module):
-    def __init__(self, mp_decoder=None, stft_small=True, embed='stretch'):
+    def __init__(self, mp_decoder=None, stft_small=True, embed='stretch', luma=False):
         super(RevealNet, self).__init__()
 
         self.mp_decoder = mp_decoder
         self.pixel_unshuffle = PixelUnshuffle(2)
         self._stft_small = stft_small
         self.embed = embed
+        self.luma = luma
 
         # If mp_decoder == unet or concatenating blocks, have RevealNet accept 2 channels as input instead of 1
-        if self.embed == 'blocks3' and self._stft_small:
+        if self.embed == 'blocks3' and not self._stft_small:
             self.im_encoder_layers = nn.ModuleList([
                 Down(8, 64),
                 Down(64, 64 * 2)
@@ -275,20 +276,31 @@ class RevealNet(nn.Module):
 
 
         # Stretch the container to make it the same size as the image
-        if self.embed == 'stretch' or self.embed == 'luma':
+        if self.embed == 'stretch':
             ct = F.interpolate(ct, size=(256 * 2, 256 * 2))
             if self.mp_decoder == 'unet':
-                ct_phase = [F.interpolate(ct_phase, size=(256 * 2, 256 * 2))]
+                ct_phase = F.interpolate(ct_phase, size=(256 * 2, 256 * 2))
         
-        if self.mp_decoder == 'unet':
+        if self.mp_decoder == 'unet': # mp_decoder=None unless using magphase
             # Concatenate mag and phase containers to input to RevealNet
-            im_enc = [torch.cat((im_enc, im_enc_phase), 1)]
+            im_enc = [torch.cat((ct, ct_phase), 1)]
         elif self.embed == 'blocks3':
-            # Undo split and concatenate in another dimension
-            (rep1, rep2) = torch.split(ct, 512, 2)
-            im_enc = [torch.cat((rep1, rep2), 1)]
+            if self._stft_small:
+                # Undo split and concatenate in another dimension
+                if self._stft_small:
+                    (rep1, rep2) = torch.split(ct, 512, 2)
+                else:
+                    (rep1, rep2) = torch.split(ct, 1024, 2)
+                im_enc = [torch.cat((rep1, rep2), 1)]
+            else:
+                # Split the 8 replicas and concatenate. 1x1x2048x1024 -> 1x8x512x512
+                split1 = torch.split(ct, 512, 3)
+                cat1 = torch.cat(split1, 1)
+                split2 = torch.split(cat1, 512, 2)
+                im_enc = [torch.cat(split2, 1)]
         elif self.embed == 'multichannel':
-            # Split the eight replicas and concatenate. 1x1x1024x512 -> 1x8x256x256
+            # Small STFT: split the 8 replicas and concatenate. 1x1x1024x512 -> 1x8x256x256
+            # Large STFT: split the 32 replicas and concatenate. 1x1x2048x1024 -> 1x32x256x256
             split1 = torch.split(ct, 256, 3)
             cat1 = torch.cat(split1, 1)
             split2 = torch.split(cat1, 256, 2)
@@ -313,7 +325,7 @@ class RevealNet(nn.Module):
         if self.embed == 'multichannel':
             # The revealed image is the output of the U-Net
             revealed = im_dec[-1]
-        elif self.embed == 'luma':
+        elif self.luma:
             # Convert RGB to YUV, average lumas and back to RGB
             unshuffled = self.pixel_unshuffle(im_dec[-1])
             rgbs = torch.narrow(unshuffled, 1, 0, 3)
@@ -344,7 +356,7 @@ class RevealNet(nn.Module):
 
 
 class StegoUNet(nn.Module):
-    def __init__(self, transform='cosine', stft_small=True, ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch'):
+    def __init__(self, transform='cosine', stft_small=True, ft_container='mag', mp_encoder='single', mp_decoder='double', mp_join='mean', permutation=False, embed='stretch', luma='luma'):
 
         super().__init__()
 
@@ -356,19 +368,25 @@ class StegoUNet(nn.Module):
         self.mp_join = mp_join
         self.permutation = permutation
         self.embed = embed
+        self.luma = luma
+
+        if self.ft_container == 'magphase' and self.embed != 'stretch':
+            raise Exception('Mag+phase does not work with embeddings other than stretch')
+        if self.luma and self.embed == 'multichannel':
+            raise Exception('Luma is not compatible with multichannel')
         
         if transform != 'fourier' or ft_container != 'magphase':
             self.mp_decoder = None # For compatiblity with RevealNet
 
         # Sub-networks
         self.PHN = PrepHidingNet(self.transform, self.stft_small, self.embed)
-        self.RN = RevealNet(self.mp_decoder, self.stft_small, self.embed)
+        self.RN = RevealNet(self.mp_decoder, self.stft_small, self.embed, self.luma)
         if transform == 'fourier' and ft_container == 'magphase':
             # The previous one is for the magnitude. Create a second one for the phase
             if mp_encoder == 'double':
-                self.PHN_phase = PrepHidingNet(self.transform)
+                self.PHN_phase = PrepHidingNet(self.transform, self.stft_small, self.embed)
             if mp_decoder == 'double':
-                self.RN_phase = RevealNet(self.mp_decoder)
+                self.RN_phase = RevealNet(self.mp_decoder, self.stft_small, self.embed)
                 if mp_join == '2D':
                     self.mag_phase_join = nn.Conv2d(6,3,1)
                 elif mp_join == '3D':
@@ -386,18 +404,16 @@ class StegoUNet(nn.Module):
         assert not ((self.transform == 'fourier' and self.ft_container == 'magphase') and cover_phase is None)
         assert not ((self.transform == 'fourier' and self.ft_container != 'magphase') and cover_phase is not None)
 
-        if self.embed != 'multichannel':
-            if self.embed == 'luma':
-                pass
-                # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
-                lumas = rgb_to_ycbcr(secret)
-                # Only keep the luma channel
-                lumas = lumas[:,0,:,:].unsqueeze(1).cuda()
-                secret = torch.cat((secret,lumas),1)
-            else:
-                # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-                zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).cuda()
-                secret = torch.cat((secret,zero),1)
+        if self.luma:
+            # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
+            lumas = rgb_to_ycbcr(secret)
+            # Only keep the luma channel
+            lumas = lumas[:,0,:,:].unsqueeze(1).to(secret.device)
+            secret = torch.cat((secret,lumas),1)
+        else:
+            # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
+            zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).to(secret.device)
+            secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
         hidden_signal = self.PHN(secret)
@@ -451,7 +467,7 @@ class StegoUNet(nn.Module):
         if self.transform == 'fourier' and self.ft_container == 'magphase':
             if self.mp_encoder == 'double':
                 container_phase = cover_phase + hidden_signal_phase
-            elif self.mp_encoder == 'single':
+            else:
                 container_phase = cover_phase + hidden_signal
             orig_container_phase = container_phase
 
@@ -479,8 +495,8 @@ class StegoUNet(nn.Module):
                     join = torch.cat((revealed,revealed_phase),1)
                     revealed = self.mag_phase_join(join)
                 elif self.mp_join == '3D':
-                    revealed = revealed.unsqueeze(0)
-                    revealed_phase = revealed_phase.unsqueeze(0)
+                    revealed = revealed.unsqueeze(1)
+                    revealed_phase = revealed_phase.unsqueeze(1)
                     join = torch.cat((revealed,revealed_phase),1)
                     revealed = self.mag_phase_join(join).squeeze(1)
             return (orig_container, orig_container_phase), revealed

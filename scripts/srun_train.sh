@@ -2,24 +2,26 @@
 source ini.sh
 
 beta=0.75 #0.05
-lam=1     #dtw 
+lam=1     #dtw 0.00001 else 1
+dtw=false
 lr=0.001
 val_itvl=500
 val_size=50
-num_epochs=15
-batch_size=10
-experiment=38
-summary="BigSTFT_Stretch"
-from_checkpoint="False"
-permutation="False"
+num_epochs=3
+batch_size=1
+experiment=1
+summary="B17"
+from_checkpoint=false
+permutation=false
 transform="fourier" #cosine
-stft_small="False"  #True
+stft_small=false  #True
 ft_container="mag"
 thet=1
 mp_encoder="double"
 mp_decoder="double"
 mp_join="2D"
-embed="stretch" #stretch
+embed="blocks3" #stretch
+luma=false
 
 if [ -d "$HOME/later2/PixInWav2/outputs/$experiment-$summary" ]; then
     while true; do
@@ -31,7 +33,7 @@ if [ -d "$HOME/later2/PixInWav2/outputs/$experiment-$summary" ]; then
         esac
     done
 fi
-mkdir $HOME/later2/PixInWav2/outputs/$experiment-$summary
+mkdir -p "$HOME/later2/PixInWav2/outputs/$experiment-$summary"
 
 cat > "$HOME/later2/PixInWav2/outputs/$experiment-$summary/parameters.txt" <<EOF
 ===Hyperparameters===:
@@ -52,6 +54,7 @@ Embedding style: $embed
 mp_encoder: $mp_encoder
 mp_decoder: $mp_decoder
 mp_join: $mp_join
+Using luma? $luma
 
 ===Training parameters===:
 Epochs: $num_epochs
@@ -61,8 +64,8 @@ val_itvl: $val_itvl its
 val_size: $val_size 
 
 ===Command to run===:
-CUDA_VISIBLE_DEVICES=X,Y python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+CUDA_VISIBLE_DEVICES=X,Y python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --dtw $dtw --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed --luma $luma
 EOF
 
-CUDA_VISIBLE_DEVICES=1,6 python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed
+CUDA_VISIBLE_DEVICES=5 python3 $HOME/later2/PixInWav2/src/main.py --beta $beta --lam $lam --dtw $dtw --lr $lr --val_itvl $val_itvl --val_size $val_size --num_epochs $num_epochs --batch_size $batch_size --summary $summary --experiment $experiment --from_checkpoint $from_checkpoint --permutation $permutation --transform $transform --stft_small $stft_small --ft_container $ft_container --thet $thet --mp_encoder $mp_encoder --mp_decoder $mp_decoder --mp_join $mp_join --embed $embed --luma $luma
 
