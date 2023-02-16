@@ -404,16 +404,17 @@ class StegoUNet(nn.Module):
         assert not ((self.transform == 'fourier' and self.ft_container == 'magphase') and cover_phase is None)
         assert not ((self.transform == 'fourier' and self.ft_container != 'magphase') and cover_phase is not None)
 
-        if self.luma:
-            # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
-            lumas = rgb_to_ycbcr(secret)
-            # Only keep the luma channel
-            lumas = lumas[:,0,:,:].unsqueeze(1).to(secret.device)
-            secret = torch.cat((secret,lumas),1)
-        else:
-            # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
-            zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).to(secret.device)
-            secret = torch.cat((secret,zero),1)
+        if self.embed != "multichannel":
+            if self.luma:
+                # Create a new channel with the luma values (R,G,B) -> (R,G,B,Y')
+                lumas = rgb_to_ycbcr(secret)
+                # Only keep the luma channel
+                lumas = lumas[:,0,:,:].unsqueeze(1).to(secret.device)
+                secret = torch.cat((secret,lumas),1)
+            else:
+                # Create a new channel with 0 (R,G,B) -> (R,G,B,0)
+                zero = torch.zeros(secret.shape[0],1,256,256).type(torch.float32).to(secret.device)
+                secret = torch.cat((secret,zero),1)
         
         # Encode the image using PHN
         hidden_signal = self.PHN(secret)
