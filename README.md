@@ -73,3 +73,7 @@ Refer to the [original repo](https://github.com/margaritageleta/PixInWav) for us
 ### Other flags
 * `permutation` specifies whether or not to permute the signals after preprocessing and before revealing.
 * `embed` is used to choose between multiple embedding methods. Non-default options have only been tested using the STFT magnitude as a container.
+
+## License
+
+**NOTICE**: This software is available for use free of charge for academic research use only. Commercial users, for profit companies or consultants, and non-profit institutions not qualifying as *academic research* must contact `jaume.ros.alonso@estudiantat.upc.edu` AND `geleta@berkeley.edu` for a separate license. 
