@@ -1,11 +1,12 @@
 # PixInWav 2
 
-Code for PixInWav 2, a deep neural network capable of hiding color images inside audio signals.
+Code for _PixInWav 2_'s _StegoUNet_, a deep neural network capable of hiding color images inside audio signals.
 
+![alt text](imgs/teaser.png "Teaser")
 
+The system converts the audio waveform to its spectral representation and adds the preprocessed image residually; the decoder is then able to extract the image. All this while introducing minimal distortion in the audio container and the secret image.
 
-
-
+![alt text](imgs/architecture.png "Architecture")
 
 
 ## Differences with respect to PixInWav 1
