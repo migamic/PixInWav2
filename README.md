@@ -27,16 +27,16 @@ This project evolved from the original [PixInWav](https://github.com/margaritage
 * Possibility to add noise on the transmitted signal.
 * Support for grayscale images. Everything is RGB now.
 
-### Other changes / bug fixes
+### Other changes
 * The waveform loss function by default uses the L1 distance instead of soft DTW.
 * Tidier output during training. It is now easier to follow the progress from the log files.
 * Validation plots are different when using STDCT or STFT (with magnitude, phase or both).
 * Flags for controlling STFT magnitude and phase have changed, to allow for the possibility of having magnitude and phase together.
 * Validation steps are less frequent and shorter (can be controlled through flags). Training is ~10x faster by default.
 * Number of training epochs is now a flag.
-* Fix validation data loading, that was using the same images from the training set.
-* Fix audio preprocessing: remove padding bias and noise.
-* Set the model in training mode during training (used to be in 'eval'). Remove batch norm since it made the performance worse.
+* Change the way data files are loaded. Structure of environment variables is more intuitive.
+* Zero-pad shorter audios randomly on either side.
+* Batch norm has been removed from the network.
 
 
 ## Repository outline
