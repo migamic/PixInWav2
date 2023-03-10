@@ -73,6 +73,33 @@ We use the following datasets:
 The following environment variables define input and output directories. They need to be defined prior to training:
 * `USER_PATH`: absolute path to the folder of the _PixInWav2_ directory (i.e. the one that contains _src_).
 * `OUT_PATH`: absolute path where all output will be written to (logs & checkpoints).
+* `DATA_PATH`: absolute path where the two data sets are located.
+
+The data directory is assumed to have the following structure:
+```
+<root directory pointed by DATA_PATH>/
+├── FSDnoisy
+│   ├── FSDnoisy18k.audio_test
+│   │   ├── 101383.wav
+│   │   ├── 101489.wav
+│   │   └── ...
+│   └── FSDnoisy18k.audio_train
+│       └── ...
+└── imagenet
+    ├── ILSVRC
+    │   └── Data
+    │       └── CLS-LOC
+    │           └── train
+    │               ├── n01440764
+    │               │   ├── n01440764_10162.JPEG
+    │               │   ├── n01440764_11346.JPEG
+    │               │   └── ...
+    │               ├── n01443537
+    │               │   └── ...
+    │               └── ...
+    └── mappings.txt
+
+```
 
 
 ## Usage
