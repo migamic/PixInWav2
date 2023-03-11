@@ -1,4 +1,6 @@
-# PixInWav 2
+# PixInWav 2: Towards Robust Image-in-Audio Deep Steganography
+
+<a href="https://arxiv.org/abs/2303.05007"><img src="https://img.shields.io/badge/arXiv-2303.05007-b31b1b.svg"></a>
 
 Code for _PixInWav 2_'s _StegoUNet_, a deep neural network capable of hiding color images inside audio signals.
 
@@ -8,6 +10,17 @@ The system converts the audio waveform to its spectral representation and adds t
 
 ![alt text](imgs/architecture.png "Architecture")
 
+If you find this paper or implementation useful, please consider citing our ArXiv preprint!
+```{tex}
+@misc{alonso2023robust,
+      title={Towards Robust Image-in-Audio Deep Steganography}, 
+      author={Jaume Ros Alonso and Margarita Geleta and Jordi Pons and Xavier Giro-i-Nieto},
+      year={2023},
+      eprint={2303.05007},
+      archivePrefix={arXiv},
+      primaryClass={cs.CR}
+}
+```
 
 ## Differences with respect to PixInWav 1
 
