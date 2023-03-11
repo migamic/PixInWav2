@@ -12,9 +12,9 @@ The system converts the audio waveform to its spectral representation and adds t
 
 If you find this paper or implementation useful, please consider citing our ArXiv preprint!
 ```{tex}
-@misc{alonso2023robust,
+@misc{ros2023robust,
       title={Towards Robust Image-in-Audio Deep Steganography}, 
-      author={Jaume Ros Alonso and Margarita Geleta and Jordi Pons and Xavier Giro-i-Nieto},
+      author={Jaume Ros and Margarita Geleta and Jordi Pons and Xavier Giro-i-Nieto},
       year={2023},
       eprint={2303.05007},
       archivePrefix={arXiv},
