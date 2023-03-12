@@ -1,6 +1,7 @@
 # PixInWav 2: Towards Robust Image-in-Audio Deep Steganography
 
 <a href="https://arxiv.org/abs/2303.05007"><img src="https://img.shields.io/badge/arXiv-2303.05007-b31b1b.svg"></a>
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/towards-robust-image-in-audio-deep/image-reconstruction-on-audio-set)](https://paperswithcode.com/sota/image-reconstruction-on-audio-set?p=towards-robust-image-in-audio-deep)
 
 Code for _PixInWav 2_'s _StegoUNet_, a deep neural network capable of hiding color images inside audio signals.
 
