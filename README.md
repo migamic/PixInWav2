@@ -150,4 +150,4 @@ We recommend running the training process through the `srun_train` script. Howev
 
 ## License
 
-**NOTICE**: This software is available for use free of charge for academic research use only. Commercial users, for profit companies or consultants, and non-profit institutions not qualifying as *academic research* must contact `jaume.ros.alonso@estudiantat.upc.edu` AND `geleta@berkeley.edu` for a separate license. 
+**NOTICE**: This software is available for use free of charge for academic research use only. Commercial users, for profit companies or consultants, and non-profit institutions not qualifying as *academic research* must contact `jaume.ros.alonso@estudiantat.upc.edu` AND `geleta@berkeley.edu` for a separate license. THIS SOFTWARE AND/OR DATA WAS DEPOSITED IN THE BAIR OPEN RESEARCH COMMONS REPOSITORY ON 03/21/2023.
